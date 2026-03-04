@@ -162,3 +162,12 @@ instance {β : Type} (f : Unit → β → RustM (ForInStep β)) : Loop.MonoLoopC
 end Order
 
 end RustM
+
+namespace Rust_primitives.Hax
+
+/-- Hax uses `failure` for unimplemented features (declare-first let bindings, etc.).
+    Maps to `RustM.fail .panic`. -/
+def failure {α : Type} (_msg : String) (_label : String) : RustM α :=
+  .fail .panic
+
+end Rust_primitives.Hax

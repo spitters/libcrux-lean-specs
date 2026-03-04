@@ -2,6 +2,7 @@
 -- Experimental lean backend for Hax
 -- The Hax prelude library can be found in hax/proof-libs/lean
 import Hax
+import LibcruxSpecs.ImplCompat
 import Std.Tactic.Do
 import Std.Do.Triple
 import Std.Tactic.Do.Syntax
@@ -110,27 +111,27 @@ def maj (x : u32) (y : u32) (z : u32) : RustM u32 := do
 
 --  lowercase sigma_0(x) = ROTR^7(x) XOR ROTR^18(x) XOR SHR^3(x)
 def sigma0 (x : u32) : RustM u32 := do
-  ((← ((← (Core_models.Num.Impl_8.rotate_right x (7 : u32)))
-      ^^^? (← (Core_models.Num.Impl_8.rotate_right x (18 : u32)))))
+  ((← ((← (Libcrux_specs.Num.Impl_8.rotate_right x (7 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (18 : u32)))))
     ^^^? (← (x >>>? (3 : i32))))
 
 --  lowercase sigma_1(x) = ROTR^17(x) XOR ROTR^19(x) XOR SHR^10(x)
 def sigma1 (x : u32) : RustM u32 := do
-  ((← ((← (Core_models.Num.Impl_8.rotate_right x (17 : u32)))
-      ^^^? (← (Core_models.Num.Impl_8.rotate_right x (19 : u32)))))
+  ((← ((← (Libcrux_specs.Num.Impl_8.rotate_right x (17 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (19 : u32)))))
     ^^^? (← (x >>>? (10 : i32))))
 
 --  uppercase Sigma_0(x) = ROTR^2(x) XOR ROTR^13(x) XOR ROTR^22(x)
 def big_sigma0 (x : u32) : RustM u32 := do
-  ((← ((← (Core_models.Num.Impl_8.rotate_right x (2 : u32)))
-      ^^^? (← (Core_models.Num.Impl_8.rotate_right x (13 : u32)))))
-    ^^^? (← (Core_models.Num.Impl_8.rotate_right x (22 : u32))))
+  ((← ((← (Libcrux_specs.Num.Impl_8.rotate_right x (2 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (13 : u32)))))
+    ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (22 : u32))))
 
 --  uppercase Sigma_1(x) = ROTR^6(x) XOR ROTR^11(x) XOR ROTR^25(x)
 def big_sigma1 (x : u32) : RustM u32 := do
-  ((← ((← (Core_models.Num.Impl_8.rotate_right x (6 : u32)))
-      ^^^? (← (Core_models.Num.Impl_8.rotate_right x (11 : u32)))))
-    ^^^? (← (Core_models.Num.Impl_8.rotate_right x (25 : u32))))
+  ((← ((← (Libcrux_specs.Num.Impl_8.rotate_right x (6 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (11 : u32)))))
+    ^^^? (← (Libcrux_specs.Num.Impl_8.rotate_right x (25 : u32))))
 
 --  Expand a 64-byte block into a 64-word message schedule.
 def schedule (block : (RustArray u8 64)) : RustM (RustArray u32 64) := do
@@ -147,7 +148,7 @@ def schedule (block : (RustArray u8 64)) : RustM (RustArray u32 64) := do
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           w
           i
-          (← (Core_models.Num.Impl_8.from_be_bytes
+          (← (Libcrux_specs.Num.Impl_8.from_be_bytes
             #v[(← block[(← ((4 : usize) *? i))]_?),
                  (← block[(← ((← ((4 : usize) *? i)) +? (1 : usize)))]_?),
                  (← block[(← ((← ((4 : usize) *? i)) +? (2 : usize)))]_?),
@@ -164,9 +165,9 @@ def schedule (block : (RustArray u8 64)) : RustM (RustArray u32 64) := do
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           w
           i
-          (← (Core_models.Num.Impl_8.wrapping_add
-            (← (Core_models.Num.Impl_8.wrapping_add
-              (← (Core_models.Num.Impl_8.wrapping_add
+          (← (Libcrux_specs.Num.Impl_8.wrapping_add
+            (← (Libcrux_specs.Num.Impl_8.wrapping_add
+              (← (Libcrux_specs.Num.Impl_8.wrapping_add
                 (← (sigma1 (← w[(← (i -? (2 : usize)))]_?)))
                 (← w[(← (i -? (7 : usize)))]_?)))
               (← (sigma0 (← w[(← (i -? (15 : usize)))]_?)))))
@@ -195,47 +196,47 @@ def compress (block : (RustArray u8 64)) (h_in : (RustArray u32 8)) :
       (fun ⟨a, b, c, d, e, f, g, h⟩ i =>
         (do
         let t1 : u32 ←
-          (Core_models.Num.Impl_8.wrapping_add
-            (← (Core_models.Num.Impl_8.wrapping_add
-              (← (Core_models.Num.Impl_8.wrapping_add
-                (← (Core_models.Num.Impl_8.wrapping_add h (← (big_sigma1 e))))
+          (Libcrux_specs.Num.Impl_8.wrapping_add
+            (← (Libcrux_specs.Num.Impl_8.wrapping_add
+              (← (Libcrux_specs.Num.Impl_8.wrapping_add
+                (← (Libcrux_specs.Num.Impl_8.wrapping_add h (← (big_sigma1 e))))
                 (← (ch e f g))))
               (← K_TABLE[i]_?)))
             (← w[i]_?));
         let t2 : u32 ←
-          (Core_models.Num.Impl_8.wrapping_add
+          (Libcrux_specs.Num.Impl_8.wrapping_add
             (← (big_sigma0 a))
             (← (maj a b c)));
         let h : u32 := g;
         let g : u32 := f;
         let f : u32 := e;
-        let e : u32 ← (Core_models.Num.Impl_8.wrapping_add d t1);
+        let e : u32 ← (Libcrux_specs.Num.Impl_8.wrapping_add d t1);
         let d : u32 := c;
         let c : u32 := b;
         let b : u32 := a;
-        let a : u32 ← (Core_models.Num.Impl_8.wrapping_add t1 t2);
+        let a : u32 ← (Libcrux_specs.Num.Impl_8.wrapping_add t1 t2);
         (pure (Rust_primitives.Hax.Tuple8.mk a b c d e f g h)) :
         RustM (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32))));
-  (pure #v[(← (Core_models.Num.Impl_8.wrapping_add (← h_in[(0 : usize)]_?) a)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+  (pure #v[(← (Libcrux_specs.Num.Impl_8.wrapping_add (← h_in[(0 : usize)]_?) a)),
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(1 : usize)]_?)
                b)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(2 : usize)]_?)
                c)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(3 : usize)]_?)
                d)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(4 : usize)]_?)
                e)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(5 : usize)]_?)
                f)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(6 : usize)]_?)
                g)),
-             (← (Core_models.Num.Impl_8.wrapping_add
+             (← (Libcrux_specs.Num.Impl_8.wrapping_add
                (← h_in[(7 : usize)]_?)
                h))])
 
@@ -299,7 +300,7 @@ def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
   let ⟨h, last_block⟩ ←
     if (← (Rust_primitives.Hax.Machine_int.lt remaining (56 : usize))) then
       let len_bytes : (RustArray u8 8) ←
-        (Core_models.Num.Impl_9.to_be_bytes bit_len);
+        (Libcrux_specs.Num.Impl_9.to_be_bytes bit_len);
       let last_block : (RustArray u8 64) ←
         (Rust_primitives.Hax.Folds.fold_range
           (0 : usize)
@@ -320,7 +321,7 @@ def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
       let pad_block : (RustArray u8 64) ←
         (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
       let len_bytes : (RustArray u8 8) ←
-        (Core_models.Num.Impl_9.to_be_bytes bit_len);
+        (Libcrux_specs.Num.Impl_9.to_be_bytes bit_len);
       let pad_block : (RustArray u8 64) ←
         (Rust_primitives.Hax.Folds.fold_range
           (0 : usize)
@@ -347,7 +348,7 @@ def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
       (fun digest i =>
         (do
         let bytes : (RustArray u8 4) ←
-          (Core_models.Num.Impl_8.to_be_bytes (← h[i]_?));
+          (Libcrux_specs.Num.Impl_8.to_be_bytes (← h[i]_?));
         let digest : (RustArray u8 32) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             digest
@@ -504,26 +505,26 @@ def maj (x : u64) (y : u64) (z : u64) : RustM u64 := do
 
 --  Big Sigma 0: ROTR^28(x) XOR ROTR^34(x) XOR ROTR^39(x) (FIPS 180-4, Section 4.1.3).
 def big_sigma0 (x : u64) : RustM u64 := do
-  ((← ((← (Core_models.Num.Impl_9.rotate_right x (28 : u32)))
-      ^^^? (← (Core_models.Num.Impl_9.rotate_right x (34 : u32)))))
-    ^^^? (← (Core_models.Num.Impl_9.rotate_right x (39 : u32))))
+  ((← ((← (Libcrux_specs.Num.Impl_9.rotate_right x (28 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (34 : u32)))))
+    ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (39 : u32))))
 
 --  Big Sigma 1: ROTR^14(x) XOR ROTR^18(x) XOR ROTR^41(x) (FIPS 180-4, Section 4.1.3).
 def big_sigma1 (x : u64) : RustM u64 := do
-  ((← ((← (Core_models.Num.Impl_9.rotate_right x (14 : u32)))
-      ^^^? (← (Core_models.Num.Impl_9.rotate_right x (18 : u32)))))
-    ^^^? (← (Core_models.Num.Impl_9.rotate_right x (41 : u32))))
+  ((← ((← (Libcrux_specs.Num.Impl_9.rotate_right x (14 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (18 : u32)))))
+    ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (41 : u32))))
 
 --  Small sigma 0: ROTR^1(x) XOR ROTR^8(x) XOR SHR^7(x) (FIPS 180-4, Section 4.1.3).
 def sigma0 (x : u64) : RustM u64 := do
-  ((← ((← (Core_models.Num.Impl_9.rotate_right x (1 : u32)))
-      ^^^? (← (Core_models.Num.Impl_9.rotate_right x (8 : u32)))))
+  ((← ((← (Libcrux_specs.Num.Impl_9.rotate_right x (1 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (8 : u32)))))
     ^^^? (← (x >>>? (7 : i32))))
 
 --  Small sigma 1: ROTR^19(x) XOR ROTR^61(x) XOR SHR^6(x) (FIPS 180-4, Section 4.1.3).
 def sigma1 (x : u64) : RustM u64 := do
-  ((← ((← (Core_models.Num.Impl_9.rotate_right x (19 : u32)))
-      ^^^? (← (Core_models.Num.Impl_9.rotate_right x (61 : u32)))))
+  ((← ((← (Libcrux_specs.Num.Impl_9.rotate_right x (19 : u32)))
+      ^^^? (← (Libcrux_specs.Num.Impl_9.rotate_right x (61 : u32)))))
     ^^^? (← (x >>>? (6 : i32))))
 
 --  Prepare the 80-word message schedule from a 128-byte block (FIPS 180-4, Section 6.4.2).
@@ -600,9 +601,9 @@ def schedule (block : (RustArray u8 128)) : RustM (RustArray u64 80) := do
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             w
             i
-            (← (Core_models.Num.Impl_9.wrapping_add
-              (← (Core_models.Num.Impl_9.wrapping_add
-                (← (Core_models.Num.Impl_9.wrapping_add
+            (← (Libcrux_specs.Num.Impl_9.wrapping_add
+              (← (Libcrux_specs.Num.Impl_9.wrapping_add
+                (← (Libcrux_specs.Num.Impl_9.wrapping_add
                   (← (sigma1 (← w[(← (i -? (2 : usize)))]_?)))
                   (← w[(← (i -? (7 : usize)))]_?)))
                 (← (sigma0 (← w[(← (i -? (15 : usize)))]_?)))))
@@ -638,37 +639,37 @@ def compress (block : (RustArray u8 128)) (h : (RustArray u64 8)) :
       (fun ⟨a, b, c, d, e, f, g, hh, t⟩ =>
         (do
         let t1 : u64 ←
-          (Core_models.Num.Impl_9.wrapping_add
-            (← (Core_models.Num.Impl_9.wrapping_add
-              (← (Core_models.Num.Impl_9.wrapping_add
-                (← (Core_models.Num.Impl_9.wrapping_add hh (← (big_sigma1 e))))
+          (Libcrux_specs.Num.Impl_9.wrapping_add
+            (← (Libcrux_specs.Num.Impl_9.wrapping_add
+              (← (Libcrux_specs.Num.Impl_9.wrapping_add
+                (← (Libcrux_specs.Num.Impl_9.wrapping_add hh (← (big_sigma1 e))))
                 (← (ch e f g))))
               (← K_TABLE[t]_?)))
             (← w[t]_?));
         let t2 : u64 ←
-          (Core_models.Num.Impl_9.wrapping_add
+          (Libcrux_specs.Num.Impl_9.wrapping_add
             (← (big_sigma0 a))
             (← (maj a b c)));
         let hh : u64 := g;
         let g : u64 := f;
         let f : u64 := e;
-        let e : u64 ← (Core_models.Num.Impl_9.wrapping_add d t1);
+        let e : u64 ← (Libcrux_specs.Num.Impl_9.wrapping_add d t1);
         let d : u64 := c;
         let c : u64 := b;
         let b : u64 := a;
-        let a : u64 ← (Core_models.Num.Impl_9.wrapping_add t1 t2);
+        let a : u64 ← (Libcrux_specs.Num.Impl_9.wrapping_add t1 t2);
         let t : usize ← (t +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple9.mk a b c d e f g hh t)) :
         RustM
         (Rust_primitives.Hax.Tuple9 u64 u64 u64 u64 u64 u64 u64 u64 usize))));
-  (pure #v[(← (Core_models.Num.Impl_9.wrapping_add (← h[(0 : usize)]_?) a)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(1 : usize)]_?) b)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(2 : usize)]_?) c)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(3 : usize)]_?) d)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(4 : usize)]_?) e)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(5 : usize)]_?) f)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(6 : usize)]_?) g)),
-             (← (Core_models.Num.Impl_9.wrapping_add (← h[(7 : usize)]_?) hh))])
+  (pure #v[(← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(0 : usize)]_?) a)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(1 : usize)]_?) b)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(2 : usize)]_?) c)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(3 : usize)]_?) d)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(4 : usize)]_?) e)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(5 : usize)]_?) f)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(6 : usize)]_?) g)),
+             (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(7 : usize)]_?) hh))])
 
 --  SHA-512 hash (FIPS 180-4, Section 6.4).
 -- 
@@ -763,7 +764,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
     else
       (pure (Rust_primitives.Hax.Tuple2.mk block h));
   let len_bytes : (RustArray u8 16) ←
-    (Core_models.Num.Impl_10.to_be_bytes bit_len);
+    (Libcrux_specs.Num.Impl_10.to_be_bytes bit_len);
   let j : usize := (0 : usize);
   let ⟨block, j⟩ ←
     (Rust_primitives.Hax.while_loop
@@ -802,7 +803,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
       (fun ⟨k, output⟩ =>
         (do
         let bytes : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_be_bytes (← h[k]_?));
+          (Libcrux_specs.Num.Impl_9.to_be_bytes (← h[k]_?));
         let b : usize := (0 : usize);
         let ⟨b, output⟩ ←
           (Rust_primitives.Hax.while_loop
@@ -923,7 +924,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
     else
       (pure (Rust_primitives.Hax.Tuple2.mk block h));
   let len_bytes : (RustArray u8 16) ←
-    (Core_models.Num.Impl_10.to_be_bytes bit_len);
+    (Libcrux_specs.Num.Impl_10.to_be_bytes bit_len);
   let j : usize := (0 : usize);
   let ⟨block, j⟩ ←
     (Rust_primitives.Hax.while_loop
@@ -962,7 +963,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
       (fun ⟨k, output⟩ =>
         (do
         let bytes : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_be_bytes (← h[k]_?));
+          (Libcrux_specs.Num.Impl_9.to_be_bytes (← h[k]_?));
         let b : usize := (0 : usize);
         let ⟨b, output⟩ ←
           (Rust_primitives.Hax.while_loop
@@ -1948,52 +1949,52 @@ def g_b
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       a
-      (← (Core_models.Num.Impl_9.wrapping_add
-        (← (Core_models.Num.Impl_9.wrapping_add (← v[a]_?) (← v[b]_?)))
+      (← (Libcrux_specs.Num.Impl_9.wrapping_add
+        (← (Libcrux_specs.Num.Impl_9.wrapping_add (← v[a]_?) (← v[b]_?)))
         x)));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       d
-      (← (Core_models.Num.Impl_9.rotate_right
+      (← (Libcrux_specs.Num.Impl_9.rotate_right
         (← ((← v[d]_?) ^^^? (← v[a]_?)))
         (32 : u32))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       c
-      (← (Core_models.Num.Impl_9.wrapping_add (← v[c]_?) (← v[d]_?))));
+      (← (Libcrux_specs.Num.Impl_9.wrapping_add (← v[c]_?) (← v[d]_?))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       b
-      (← (Core_models.Num.Impl_9.rotate_right
+      (← (Libcrux_specs.Num.Impl_9.rotate_right
         (← ((← v[b]_?) ^^^? (← v[c]_?)))
         (24 : u32))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       a
-      (← (Core_models.Num.Impl_9.wrapping_add
-        (← (Core_models.Num.Impl_9.wrapping_add (← v[a]_?) (← v[b]_?)))
+      (← (Libcrux_specs.Num.Impl_9.wrapping_add
+        (← (Libcrux_specs.Num.Impl_9.wrapping_add (← v[a]_?) (← v[b]_?)))
         y)));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       d
-      (← (Core_models.Num.Impl_9.rotate_right
+      (← (Libcrux_specs.Num.Impl_9.rotate_right
         (← ((← v[d]_?) ^^^? (← v[a]_?)))
         (16 : u32))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       c
-      (← (Core_models.Num.Impl_9.wrapping_add (← v[c]_?) (← v[d]_?))));
+      (← (Libcrux_specs.Num.Impl_9.wrapping_add (← v[c]_?) (← v[d]_?))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       b
-      (← (Core_models.Num.Impl_9.rotate_right
+      (← (Libcrux_specs.Num.Impl_9.rotate_right
         (← ((← v[b]_?) ^^^? (← v[c]_?)))
         (63 : u32))));
   (pure v)
@@ -2173,7 +2174,7 @@ def bytes_to_words_b (block : (RustSlice u8)) : RustM (RustArray u64 16) := do
             (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
               m
               i
-              (← (Core_models.Num.Impl_9.from_le_bytes
+              (← (Libcrux_specs.Num.Impl_9.from_le_bytes
                 #v[(← block[base]_?),
                      (← block[(← (base +? (1 : usize)))]_?),
                      (← block[(← (base +? (2 : usize)))]_?),
@@ -2211,7 +2212,7 @@ def bytes_to_words_b (block : (RustSlice u8)) : RustM (RustArray u64 16) := do
             (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
               m
               i
-              (← (Core_models.Num.Impl_9.from_le_bytes buf)));
+              (← (Libcrux_specs.Num.Impl_9.from_le_bytes buf)));
           (pure m) :
         RustM (RustArray u64 16))));
   (pure m)
@@ -2273,52 +2274,52 @@ def g_s
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       a
-      (← (Core_models.Num.Impl_8.wrapping_add
-        (← (Core_models.Num.Impl_8.wrapping_add (← v[a]_?) (← v[b]_?)))
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add
+        (← (Libcrux_specs.Num.Impl_8.wrapping_add (← v[a]_?) (← v[b]_?)))
         x)));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       d
-      (← (Core_models.Num.Impl_8.rotate_right
+      (← (Libcrux_specs.Num.Impl_8.rotate_right
         (← ((← v[d]_?) ^^^? (← v[a]_?)))
         (16 : u32))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       c
-      (← (Core_models.Num.Impl_8.wrapping_add (← v[c]_?) (← v[d]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← v[c]_?) (← v[d]_?))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       b
-      (← (Core_models.Num.Impl_8.rotate_right
+      (← (Libcrux_specs.Num.Impl_8.rotate_right
         (← ((← v[b]_?) ^^^? (← v[c]_?)))
         (12 : u32))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       a
-      (← (Core_models.Num.Impl_8.wrapping_add
-        (← (Core_models.Num.Impl_8.wrapping_add (← v[a]_?) (← v[b]_?)))
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add
+        (← (Libcrux_specs.Num.Impl_8.wrapping_add (← v[a]_?) (← v[b]_?)))
         y)));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       d
-      (← (Core_models.Num.Impl_8.rotate_right
+      (← (Libcrux_specs.Num.Impl_8.rotate_right
         (← ((← v[d]_?) ^^^? (← v[a]_?)))
         (8 : u32))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       c
-      (← (Core_models.Num.Impl_8.wrapping_add (← v[c]_?) (← v[d]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← v[c]_?) (← v[d]_?))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       b
-      (← (Core_models.Num.Impl_8.rotate_right
+      (← (Libcrux_specs.Num.Impl_8.rotate_right
         (← ((← v[b]_?) ^^^? (← v[c]_?)))
         (7 : u32))));
   (pure v)
@@ -2498,7 +2499,7 @@ def bytes_to_words_s (block : (RustSlice u8)) : RustM (RustArray u32 16) := do
             (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
               m
               i
-              (← (Core_models.Num.Impl_8.from_le_bytes
+              (← (Libcrux_specs.Num.Impl_8.from_le_bytes
                 #v[(← block[base]_?),
                      (← block[(← (base +? (1 : usize)))]_?),
                      (← block[(← (base +? (2 : usize)))]_?),
@@ -2532,7 +2533,7 @@ def bytes_to_words_s (block : (RustSlice u8)) : RustM (RustArray u32 16) := do
             (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
               m
               i
-              (← (Core_models.Num.Impl_8.from_le_bytes buf)));
+              (← (Libcrux_specs.Num.Impl_8.from_le_bytes buf)));
           (pure m) :
         RustM (RustArray u32 16))));
   (pure m)
@@ -2804,7 +2805,7 @@ def quarter_round
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       a
-      (← (Core_models.Num.Impl_8.wrapping_add (← state[a]_?) (← state[b]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← state[a]_?) (← state[b]_?))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
@@ -2814,12 +2815,12 @@ def quarter_round
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       d
-      (← (Core_models.Num.Impl_8.rotate_left (← state[d]_?) (16 : u32))));
+      (← (Libcrux_specs.Num.Impl_8.rotate_left (← state[d]_?) (16 : u32))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       c
-      (← (Core_models.Num.Impl_8.wrapping_add (← state[c]_?) (← state[d]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← state[c]_?) (← state[d]_?))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
@@ -2829,12 +2830,12 @@ def quarter_round
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       b
-      (← (Core_models.Num.Impl_8.rotate_left (← state[b]_?) (12 : u32))));
+      (← (Libcrux_specs.Num.Impl_8.rotate_left (← state[b]_?) (12 : u32))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       a
-      (← (Core_models.Num.Impl_8.wrapping_add (← state[a]_?) (← state[b]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← state[a]_?) (← state[b]_?))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
@@ -2844,12 +2845,12 @@ def quarter_round
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       d
-      (← (Core_models.Num.Impl_8.rotate_left (← state[d]_?) (8 : u32))));
+      (← (Libcrux_specs.Num.Impl_8.rotate_left (← state[d]_?) (8 : u32))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       c
-      (← (Core_models.Num.Impl_8.wrapping_add (← state[c]_?) (← state[d]_?))));
+      (← (Libcrux_specs.Num.Impl_8.wrapping_add (← state[c]_?) (← state[d]_?))));
   let state : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
@@ -2859,7 +2860,7 @@ def quarter_round
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       state
       b
-      (← (Core_models.Num.Impl_8.rotate_left (← state[b]_?) (7 : u32))));
+      (← (Libcrux_specs.Num.Impl_8.rotate_left (← state[b]_?) (7 : u32))));
   (pure state)
 
 --  Perform the 20-round ChaCha20 inner block function (10 double rounds).
@@ -3033,7 +3034,7 @@ def chacha20_block
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           working_state
           i
-          (← (Core_models.Num.Impl_8.wrapping_add
+          (← (Libcrux_specs.Num.Impl_8.wrapping_add
             (← working_state[i]_?)
             (← initial_state[i]_?)))) :
         RustM (RustArray u32 16))));
@@ -3080,7 +3081,7 @@ def chacha20_encrypt
           (chacha20_block
             key
             nonce
-            (← (Core_models.Num.Impl_8.wrapping_add
+            (← (Libcrux_specs.Num.Impl_8.wrapping_add
               counter
               (← (Rust_primitives.Hax.cast_op i)))));
         (Rust_primitives.Hax.Folds.fold_range
@@ -3102,7 +3103,7 @@ def chacha20_encrypt
         (chacha20_block
           key
           nonce
-          (← (Core_models.Num.Impl_8.wrapping_add
+          (← (Libcrux_specs.Num.Impl_8.wrapping_add
             counter
             (← (Rust_primitives.Hax.cast_op num_full_blocks)))));
       (Rust_primitives.Hax.Folds.fold_range
@@ -3190,7 +3191,7 @@ structure U256 where
 --  The prime modulus p = 2^130 - 5.
 --  We store this symbolically and reduce using the identity: 2^130 = 5 (mod p).
 def P_LO : u128 :=
-  RustM.of_isOk (do (Core_models.Num.Impl_10.MAX -? (4 : u128))) (by rfl)
+  RustM.of_isOk (do (Libcrux_specs.Num.Impl_10.MAX -? (4 : u128))) (by rfl)
 
 def P_HI : u8 := (3 : u8)
 
@@ -3314,7 +3315,7 @@ def num_to_le_bytes (value : u128) : RustM (RustArray u8 16) := do
 --  Result may have hi up to 7 (3 bits).
 def u130_add (a : U130) (b : U130) : RustM U130 := do
   let ⟨lo, carry⟩ ←
-    (Core_models.Num.Impl_10.overflowing_add (U130.lo a) (U130.lo b));
+    (Libcrux_specs.Num.Impl_10.overflowing_add (U130.lo a) (U130.lo b));
   let hi : u8 ←
     ((← ((U130.hi a) +? (U130.hi b)))
       +? (← (Rust_primitives.Hax.cast_op carry)));
@@ -3341,18 +3342,18 @@ def u128_mul (a : u128) (b : u128) : RustM U256 := do
   let lh : u128 ← (a_lo *? b_hi);
   let hl : u128 ← (a_hi *? b_lo);
   let hh : u128 ← (a_hi *? b_hi);
-  let ⟨mid_sum, mid_carry⟩ ← (Core_models.Num.Impl_10.overflowing_add lh hl);
+  let ⟨mid_sum, mid_carry⟩ ← (Libcrux_specs.Num.Impl_10.overflowing_add lh hl);
   let mid_lo : u128 ←
     ((← (Rust_primitives.Hax.cast_op (← (Rust_primitives.Hax.cast_op mid_sum))))
       <<<? (64 : i32));
   let mid_hi : u128 ←
     (Rust_primitives.Hax.cast_op
       (← (Rust_primitives.Hax.cast_op (← (mid_sum >>>? (64 : i32))))));
-  let ⟨lo, carry1⟩ ← (Core_models.Num.Impl_10.overflowing_add ll mid_lo);
+  let ⟨lo, carry1⟩ ← (Libcrux_specs.Num.Impl_10.overflowing_add ll mid_lo);
   let hi : u128 ←
-    (Core_models.Num.Impl_10.wrapping_add
-      (← (Core_models.Num.Impl_10.wrapping_add
-        (← (Core_models.Num.Impl_10.wrapping_add hh mid_hi))
+    (Libcrux_specs.Num.Impl_10.wrapping_add
+      (← (Libcrux_specs.Num.Impl_10.wrapping_add
+        (← (Libcrux_specs.Num.Impl_10.wrapping_add hh mid_hi))
         (← (Rust_primitives.Hax.cast_op carry1))))
       (← if mid_carry then
         ((1 : u128) <<<? (64 : i32))
@@ -3373,23 +3374,23 @@ def u130_mul_mod (acc : U130) (r : u128) : RustM U130 := do
   let prod_hi_val : u128 ←
     ((← (Rust_primitives.Hax.cast_op (U130.hi acc))) *? r);
   let ⟨upper, carry⟩ ←
-    (Core_models.Num.Impl_10.overflowing_add (U256.hi prod_lo) prod_hi_val);
+    (Libcrux_specs.Num.Impl_10.overflowing_add (U256.hi prod_lo) prod_hi_val);
   let upper_lo2 : u8 ←
     (Rust_primitives.Hax.cast_op (← (upper &&&? (3 : u128))));
   let upper_hi : u128 ← (upper >>>? (2 : i32));
   let base_lo : u128 := (U256.lo prod_lo);
   let base_hi : u8 := upper_lo2;
   let high_times_5 : u128 ←
-    (Core_models.Num.Impl_10.wrapping_add
-      (← (Core_models.Num.Impl_10.wrapping_mul upper_hi (5 : u128)))
+    (Libcrux_specs.Num.Impl_10.wrapping_add
+      (← (Libcrux_specs.Num.Impl_10.wrapping_mul upper_hi (5 : u128)))
       (← if carry then ((5 : u128) <<<? (126 : i32)) else (pure (0 : u128))));
   let ⟨sum_lo, c⟩ ←
-    (Core_models.Num.Impl_10.overflowing_add base_lo high_times_5);
+    (Libcrux_specs.Num.Impl_10.overflowing_add base_lo high_times_5);
   let sum_hi : u8 ← (base_hi +? (← (Rust_primitives.Hax.cast_op c)));
   let extra : u8 ← (sum_hi >>>? (2 : i32));
   let final_hi : u8 ← (sum_hi &&&? (3 : u8));
   let ⟨final_lo, c2⟩ ←
-    (Core_models.Num.Impl_10.overflowing_add
+    (Libcrux_specs.Num.Impl_10.overflowing_add
       sum_lo
       (← ((← (Rust_primitives.Hax.cast_op extra)) *? (5 : u128))));
   let final_hi2 : u8 ← (final_hi +? (← (Rust_primitives.Hax.cast_op c2)));
@@ -3401,7 +3402,7 @@ def u130_mul_mod (acc : U130) (r : u128) : RustM U130 := do
 --  We check if acc >= p, and if so subtract p.
 def final_reduce (acc : U130) : RustM u128 := do
   let ⟨test_lo, c⟩ ←
-    (Core_models.Num.Impl_10.overflowing_add (U130.lo acc) (5 : u128));
+    (Libcrux_specs.Num.Impl_10.overflowing_add (U130.lo acc) (5 : u128));
   let test_hi : u8 ← ((U130.hi acc) +? (← (Rust_primitives.Hax.cast_op c)));
   if (← (Rust_primitives.Hax.Machine_int.ge test_hi (4 : u8))) then
     (pure test_lo)
@@ -3519,7 +3520,7 @@ def poly1305 (msg : (RustSlice u8)) (key : (RustArray u8 32)) :
     else
       (pure acc);
   let acc_reduced : u128 ← (final_reduce acc);
-  let tag_full : u128 ← (Core_models.Num.Impl_10.wrapping_add acc_reduced s);
+  let tag_full : u128 ← (Libcrux_specs.Num.Impl_10.wrapping_add acc_reduced s);
   (num_to_le_bytes tag_full)
 
 end Libcrux_specs.Poly1305
@@ -4791,14 +4792,14 @@ namespace Libcrux_specs.Aes_gcm
 def inc32 (counter : (RustArray u8 16)) : RustM (RustArray u8 16) := do
   let result : (RustArray u8 16) := counter;
   let ctr : u32 ←
-    (Core_models.Num.Impl_8.from_be_bytes
+    (Libcrux_specs.Num.Impl_8.from_be_bytes
       #v[(← result[(12 : usize)]_?),
            (← result[(13 : usize)]_?),
            (← result[(14 : usize)]_?),
            (← result[(15 : usize)]_?)]);
-  let incremented : u32 ← (Core_models.Num.Impl_8.wrapping_add ctr (1 : u32));
+  let incremented : u32 ← (Libcrux_specs.Num.Impl_8.wrapping_add ctr (1 : u32));
   let bytes : (RustArray u8 4) ←
-    (Core_models.Num.Impl_8.to_be_bytes incremented);
+    (Libcrux_specs.Num.Impl_8.to_be_bytes incremented);
   let result : (RustArray u8 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       result
@@ -4971,9 +4972,9 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
         (← (Core_models.Slice.Impl.len u8 ciphertext))))
       *? (8 : u64));
   let aad_len_bytes : (RustArray u8 8) ←
-    (Core_models.Num.Impl_9.to_be_bytes aad_bits);
+    (Libcrux_specs.Num.Impl_9.to_be_bytes aad_bits);
   let ct_len_bytes : (RustArray u8 8) ←
-    (Core_models.Num.Impl_9.to_be_bytes ct_bits);
+    (Libcrux_specs.Num.Impl_9.to_be_bytes ct_bits);
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
     (Rust_primitives.Hax.while_loop
@@ -5687,7 +5688,7 @@ def fe_reduce (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do
       s
       (4 : usize)
       (← ((← s[(4 : usize)]_?) &&&? MASK51)));
-  let mask : u64 ← (Core_models.Num.Impl_9.wrapping_neg c4);
+  let mask : u64 ← (Libcrux_specs.Num.Impl_9.wrapping_neg c4);
   (pure #v[(← (Rust_primitives.Hax.Machine_int.bitor
                (← ((← s[(0 : usize)]_?) &&&? mask))
                (← ((← r[(0 : usize)]_?)
@@ -5866,7 +5867,7 @@ def fe_to_bytes (a : (RustArray u64 5)) : RustM (RustArray u8 32) := do
       (fun ⟨k, val⟩ =>
         (do
         let b : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_le_bytes (← words[k]_?));
+          (Libcrux_specs.Num.Impl_9.to_le_bytes (← words[k]_?));
         let j : usize := (0 : usize);
         let ⟨j, val⟩ ←
           (Rust_primitives.Hax.while_loop
@@ -5897,7 +5898,7 @@ def fe_to_bytes (a : (RustArray u64 5)) : RustM (RustArray u8 32) := do
 --  Constant-time conditional swap. If swap == 1, exchange a and b.
 def cswap (swap : u64) (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
     RustM (Rust_primitives.Hax.Tuple2 (RustArray u64 5) (RustArray u64 5)) := do
-  let mask : u64 ← (Core_models.Num.Impl_9.wrapping_neg swap);
+  let mask : u64 ← (Libcrux_specs.Num.Impl_9.wrapping_neg swap);
   let ra : (RustArray u64 5) ←
     (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
   let rb : (RustArray u64 5) ←
@@ -6257,8 +6258,8 @@ def sub256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
         (do
         let i : usize ← (i -? (1 : usize));
         let s : u128 ←
-          (Core_models.Num.Impl_10.wrapping_sub
-            (← (Core_models.Num.Impl_10.wrapping_sub
+          (Libcrux_specs.Num.Impl_10.wrapping_sub
+            (← (Libcrux_specs.Num.Impl_10.wrapping_sub
               (← (Rust_primitives.Hax.cast_op (← a[i]_?)))
               (← (Rust_primitives.Hax.cast_op (← b[i]_?)))))
             borrow);
@@ -7235,7 +7236,7 @@ def fp_to_bytes (a : (RustArray u64 4)) : RustM (RustArray u8 32) := do
       (fun ⟨i, out⟩ =>
         (do
         let bytes : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_be_bytes (← a[i]_?));
+          (Libcrux_specs.Num.Impl_9.to_be_bytes (← a[i]_?));
         let j : usize := (0 : usize);
         let ⟨j, out⟩ ←
           (Rust_primitives.Hax.while_loop
@@ -8398,8 +8399,8 @@ def sub_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) :
       (fun ⟨acc, borrow, i⟩ =>
         (do
         let ⟨r, b1⟩ ←
-          (Core_models.Num.Impl_9.overflowing_sub (← acc[i]_?) (← l[i]_?));
-        let ⟨r2, b2⟩ ← (Core_models.Num.Impl_9.overflowing_sub r borrow);
+          (Libcrux_specs.Num.Impl_9.overflowing_sub (← acc[i]_?) (← l[i]_?));
+        let ⟨r2, b2⟩ ← (Libcrux_specs.Num.Impl_9.overflowing_sub r borrow);
         let acc : (RustArray u64 5) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             acc
@@ -8415,7 +8416,7 @@ def sub_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) :
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       acc
       (4 : usize)
-      (← (Core_models.Num.Impl_9.wrapping_sub (← acc[(4 : usize)]_?) borrow)));
+      (← (Libcrux_specs.Num.Impl_9.wrapping_sub (← acc[(4 : usize)]_?) borrow)));
   (pure acc)
 
 --  Reduce a 512-bit little-endian scalar mod L, where
@@ -8604,7 +8605,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             acc
             (0 : usize)
-            (← (Core_models.Num.Impl_9.wrapping_add (← acc[(0 : usize)]_?) b)));
+            (← (Libcrux_specs.Num.Impl_9.wrapping_add (← acc[(0 : usize)]_?) b)));
         let acc : (RustArray u64 5) ←
           if
           (← (Rust_primitives.Hax.Machine_int.lt (← acc[(0 : usize)]_?) b)) then
@@ -8612,7 +8613,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
               (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                 acc
                 (1 : usize)
-                (← (Core_models.Num.Impl_9.wrapping_add
+                (← (Libcrux_specs.Num.Impl_9.wrapping_add
                   (← acc[(1 : usize)]_?)
                   (1 : u64))));
             (pure acc)
@@ -8643,7 +8644,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
       (fun ⟨i, result⟩ =>
         (do
         let bytes : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_le_bytes (← acc[i]_?));
+          (Libcrux_specs.Num.Impl_9.to_le_bytes (← acc[i]_?));
         let j : usize := (0 : usize);
         let ⟨j, result⟩ ←
           (Rust_primitives.Hax.while_loop
@@ -9439,8 +9440,8 @@ def reduce_mod_n (a : (RustArray u64 4)) : RustM (RustArray u64 4) := do
           (do
           let i : usize ← (i -? (1 : usize));
           let s : u128 ←
-            (Core_models.Num.Impl_10.wrapping_sub
-              (← (Core_models.Num.Impl_10.wrapping_sub
+            (Libcrux_specs.Num.Impl_10.wrapping_sub
+              (← (Libcrux_specs.Num.Impl_10.wrapping_sub
                 (← (Rust_primitives.Hax.cast_op (← a[i]_?)))
                 (← (Rust_primitives.Hax.cast_op
                   (← Libcrux_specs.P256.P256_N[i]_?)))))
@@ -9903,8 +9904,8 @@ def bn_add (a : (RustSlice u64)) (b : (RustSlice u64)) :
             b[i]_?
           else
             (pure (0 : u64));
-        let ⟨sum1, c1⟩ ← (Core_models.Num.Impl_9.overflowing_add la lb);
-        let ⟨sum2, c2⟩ ← (Core_models.Num.Impl_9.overflowing_add sum1 carry);
+        let ⟨sum1, c1⟩ ← (Libcrux_specs.Num.Impl_9.overflowing_add la lb);
+        let ⟨sum2, c2⟩ ← (Libcrux_specs.Num.Impl_9.overflowing_add sum1 carry);
         let result : (Alloc.Vec.Vec u64 Alloc.Alloc.Global) ←
           (Alloc.Slice.Impl.to_vec
             (← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
@@ -9953,8 +9954,8 @@ def bn_sub (a : (RustSlice u64)) (b : (RustSlice u64)) :
             b[i]_?
           else
             (pure (0 : u64));
-        let ⟨diff1, b1⟩ ← (Core_models.Num.Impl_9.overflowing_sub la lb);
-        let ⟨diff2, b2⟩ ← (Core_models.Num.Impl_9.overflowing_sub diff1 borrow);
+        let ⟨diff1, b1⟩ ← (Libcrux_specs.Num.Impl_9.overflowing_sub la lb);
+        let ⟨diff2, b2⟩ ← (Libcrux_specs.Num.Impl_9.overflowing_sub diff1 borrow);
         let result : (Alloc.Vec.Vec u64 Alloc.Alloc.Global) ←
           (Alloc.Slice.Impl.to_vec
             (← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
@@ -10050,7 +10051,7 @@ def bn_bit_length (a : (RustSlice u64)) : RustM usize := do
     ((← ((← (elen -? (1 : usize))) *? (64 : usize)))
       +? (← ((64 : usize)
         -? (← (Rust_primitives.Hax.cast_op
-          (← (Core_models.Num.Impl_9.leading_zeros top)))))))
+          (← (Libcrux_specs.Num.Impl_9.leading_zeros top)))))))
 
 --  Division and modulus: returns (quotient, remainder) such that a = q * b + r.
 --  Panics if b is zero.
@@ -10206,11 +10207,11 @@ Note: the error was labeled with context `DirectAndMut`.
                     else
                       (pure (0 : u64));
                   let ⟨d1, b1⟩ ←
-                    (Core_models.Num.Impl_9.overflowing_sub
+                    (Libcrux_specs.Num.Impl_9.overflowing_sub
                       (← remainder[k]_?)
                       bk);
                   let ⟨d2, b2⟩ ←
-                    (Core_models.Num.Impl_9.overflowing_sub d1 borrow);
+                    (Libcrux_specs.Num.Impl_9.overflowing_sub d1 borrow);
                   let remainder : (Alloc.Vec.Vec u64 Alloc.Alloc.Global) ←
                     (Alloc.Slice.Impl.to_vec
                       (←
@@ -10399,7 +10400,7 @@ def mgf1_sha256 (seed : (RustSlice u8)) (mask_len : usize) :
       (fun ⟨counter, t⟩ =>
         (do
         let counter_bytes : (RustArray u8 4) ←
-          (Core_models.Num.Impl_8.to_be_bytes counter);
+          (Libcrux_specs.Num.Impl_8.to_be_bytes counter);
         let input : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
           (Alloc.Vec.Impl.with_capacity u8
             (← ((← (Core_models.Slice.Impl.len u8 seed)) +? (4 : usize))));
@@ -11012,7 +11013,7 @@ def byte_bit_length (bytes : (RustSlice u8)) : RustM usize := do
     let bits_in_top : usize ←
       ((8 : usize)
         -? (← (Rust_primitives.Hax.cast_op
-          (← (Core_models.Num.Impl_6.leading_zeros top_byte)))));
+          (← (Libcrux_specs.Num.Impl_6.leading_zeros top_byte)))));
     (bits_in_top
       +? (← ((← ((← ((← (Core_models.Slice.Impl.len u8 bytes)) -? start))
           -? (1 : usize)))

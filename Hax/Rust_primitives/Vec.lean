@@ -62,4 +62,10 @@ instance {α n} : Coe (Array α) (RustM (Vector α n)) where
       apply (Array.toVector x)
     else .fail (.arrayOutOfBounds)
 
+def Alloc.Vec.Impl_1.truncate (T : Type) (_A : Type)
+    (v : Alloc.Vec.Vec T _A) (len : usize) : RustM (Alloc.Vec.Vec T _A) :=
+  let n := len.toNat
+  if n ≥ v.size then pure v
+  else pure (v.take n)
+
 end RustVectors

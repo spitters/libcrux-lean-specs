@@ -76,6 +76,21 @@ instance Range.instGetElemResultVectorUSize64 {α : Type} {n : Nat} :
       RustM.fail Error.arrayOutOfBounds
 
 
+-- RangeFull indexing: xs[..] returns the entire collection as a slice
+instance RangeFull.instGetElemResultArray {α : Type} :
+  GetElemResult
+    (Array α)
+    (Core_models.Ops.Range.RangeFull)
+    (Array α) where
+  getElemResult xs _ := pure xs
+
+instance RangeFull.instGetElemResultVector {α : Type} {n : Nat} :
+  GetElemResult
+    (Vector α n)
+    (Core_models.Ops.Range.RangeFull)
+    (Array α) where
+  getElemResult xs _ := pure xs.toArray
+
 -- RangeFrom indexing: xs[start..] returns everything from start to end
 instance RangeFrom.instGetElemResultArrayUSize64 {α : Type} :
   GetElemResult

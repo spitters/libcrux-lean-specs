@@ -197,6 +197,134 @@ macro "declare_Hax_shift_ops" : command => do
 
 declare_Hax_shift_ops
 
+/-
+## u128 (BitVec 128) shift instances
+
+u128 is `BitVec 128` which doesn't have the same `toBitVec`/`toNat` methods
+as native UInt types. We add shift instances manually for the RHS types that
+appear in hax extraction (primarily i32, u32, u64).
+-/
+
+section U128Shifts
+
+private def u128ShiftAmount (n : Nat) : Nat := n % 128
+
+-- Helper: convert signed type to shift amount (clamp negatives to 0)
+private def i32ToShiftNat (y : i32) : Nat := y.toNatClampNeg
+
+open Lean in
+set_option hygiene false in
+macro "declare_u128_shift_instances" : command => do
+  let mut cmds := #[]
+  let tys := [
+    ("UInt8", false),
+    ("UInt16", false),
+    ("UInt32", false),
+    ("UInt64", false),
+    ("USize64", false),
+    ("Int8", true),
+    ("Int16", true),
+    ("Int32", true),
+    ("Int64", true),
+    ("ISize", true)
+  ]
+  for (ty, signed) in tys do
+    let tyIdent := mkIdent ty.toName
+    let toNatFn := mkIdent (if signed then `toNatClampNeg else `toNat)
+    cmds := cmds.push $ ← `(
+      @[reducible]
+      instance : Core_models.Ops.Bit.Shr.AssociatedTypes u128 $tyIdent where
+        Output := u128
+      @[reducible]
+      instance : Core_models.Ops.Bit.Shl.AssociatedTypes u128 $tyIdent where
+        Output := u128
+
+      instance : Core_models.Ops.Bit.Shr u128 $tyIdent where
+        shr x y :=
+          if 0 ≤ y && y.$toNatFn < 128
+          then pure (x >>> y.$toNatFn)
+          else .fail .integerOverflow
+
+      instance : Core_models.Ops.Bit.Shl u128 $tyIdent where
+        shl x y :=
+          if 0 ≤ y && y.$toNatFn < 128
+          then pure (x <<< y.$toNatFn)
+          else .fail .integerOverflow
+    )
+  -- Also add u128 shifted by u128
+  cmds := cmds.push $ ← `(
+    @[reducible]
+    instance : Core_models.Ops.Bit.Shr.AssociatedTypes u128 u128 where
+      Output := u128
+    @[reducible]
+    instance : Core_models.Ops.Bit.Shl.AssociatedTypes u128 u128 where
+      Output := u128
+
+    instance : Core_models.Ops.Bit.Shr u128 u128 where
+      shr x y :=
+        if y.toNat < 128
+        then pure (x >>> y.toNat)
+        else .fail .integerOverflow
+
+    instance : Core_models.Ops.Bit.Shl u128 u128 where
+      shl x y :=
+        if y.toNat < 128
+        then pure (x <<< y.toNat)
+        else .fail .integerOverflow
+  )
+  return ⟨mkNullNode cmds⟩
+
+declare_u128_shift_instances
+
+-- Also need: native types shifted BY u128 (less common but may appear)
+-- For now, skip these as extraction doesn't seem to need them.
+
+end U128Shifts
+
+/-
+## u128 arithmetic operator instances
+
+u128 (BitVec 128) also needs Add/Sub/Mul/Div/Rem/Neg instances for the
+checked arithmetic operators (+?, -?, *?, etc.)
+-/
+
+@[reducible] instance : Core_models.Ops.Arith.Add.AssociatedTypes u128 u128 where
+  Output := u128
+@[reducible] instance : Core_models.Ops.Arith.Sub.AssociatedTypes u128 u128 where
+  Output := u128
+@[reducible] instance : Core_models.Ops.Arith.Mul.AssociatedTypes u128 u128 where
+  Output := u128
+@[reducible] instance : Core_models.Ops.Arith.Div.AssociatedTypes u128 u128 where
+  Output := u128
+@[reducible] instance : Core_models.Ops.Arith.Rem.AssociatedTypes u128 u128 where
+  Output := u128
+@[reducible] instance : Core_models.Ops.Arith.Neg.AssociatedTypes u128 where
+  Output := u128
+
+instance : Core_models.Ops.Arith.Add u128 u128 where
+  add x y :=
+    if BitVec.uaddOverflow x y then .fail .integerOverflow
+    else pure (x + y)
+
+instance : Core_models.Ops.Arith.Sub u128 u128 where
+  sub x y :=
+    if BitVec.usubOverflow x y then .fail .integerOverflow
+    else pure (x - y)
+
+instance : Core_models.Ops.Arith.Mul u128 u128 where
+  mul x y :=
+    if BitVec.umulOverflow x y then .fail .integerOverflow
+    else pure (x * y)
+
+instance : Core_models.Ops.Arith.Div u128 u128 where
+  div x y :=
+    if y = 0 then .fail .divisionByZero
+    else pure (x / y)
+
+instance : Core_models.Ops.Arith.Rem u128 u128 where
+  rem x y :=
+    if y = 0 then .fail .divisionByZero
+    else pure (x % y)
 
 open Lean in
 set_option hygiene false in
@@ -293,6 +421,67 @@ def to_be_bytes (x: u32) : RustM (Vector u8 4) :=
 
 end Core_models.Num.Impl_8
 
+/-
+## Wrapping operations for u64 (Impl_7 in the prelude's numbering)
+
+The prelude's Extracted.lean assigns Impl_7 to u64 numeric methods.
+We add wrapping ops that are not in the opaque list.
+Note: rotate_right, to_be_bytes, etc. are already declared as opaques in
+Extracted.lean — we implement them there (via axiom replacement) separately.
+-/
+
+namespace Core_models.Num.Impl_7
+
+@[simp, spec]
+def wrapping_add (x y : u64) : RustM u64 := pure (x + y)
+
+@[simp, spec]
+def wrapping_sub (x y : u64) : RustM u64 := pure (x - y)
+
+@[simp, spec]
+def wrapping_mul (x y : u64) : RustM u64 := pure (x * y)
+
+@[simp, spec]
+def wrapping_neg (x : u64) : RustM u64 := pure (0 - x)
+
+@[simp, spec]
+def pow (base : u64) (exp : u32) : RustM u64 := pure (UInt64.ofNat (base.toNat ^ exp.toNat))
+
+end Core_models.Num.Impl_7
+
+/-
+## Wrapping operations for u128 (Impl_9 in the prelude's numbering)
+
+The prelude assigns Impl_9 to u128 numeric methods.
+u128 is `BitVec 128` in Lean.
+-/
+
+namespace Core_models.Num.Impl_9
+
+@[simp, spec]
+def wrapping_add (x y : u128) : RustM u128 := pure (x + y)
+
+@[simp, spec]
+def wrapping_sub (x y : u128) : RustM u128 := pure (x - y)
+
+@[simp, spec]
+def wrapping_mul (x y : u128) : RustM u128 := pure (x * y)
+
+@[simp, spec]
+def wrapping_neg (x : u128) : RustM u128 := pure (0 - x)
+
+/-- overflowing_add returns (result, carry_flag) -/
+@[simp, spec]
+def overflowing_add (x y : u128) : RustM (u128 × Bool) :=
+  let sum := x + y
+  let carry := (x.toNat + y.toNat) ≥ 2^128
+  pure (sum, carry)
+
+def MAX : u128 := BitVec.ofNat 128 (2^128 - 1)
+
+def MIN : u128 := BitVec.ofNat 128 0
+
+end Core_models.Num.Impl_9
 
 
 
