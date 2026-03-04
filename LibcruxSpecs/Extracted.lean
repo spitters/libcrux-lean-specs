@@ -2637,7 +2637,7 @@ def hkdf_expand
       (← (Rust_primitives.Hax.Machine_int.le n (255 : usize))))) then
       (Rust_primitives.Hax.never_to_any
         (← (Core_models.Panicking.panic_fmt
-          sorry /- panic: HKDF-Expand length too large -/)))
+          (Core_models.Fmt.Arguments.mk Rust_primitives.Hax.Tuple0.mk))))
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   let okm : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
@@ -3050,7 +3050,7 @@ def chacha20_block
       (fun output i =>
         (do
         (u32_to_le_bytes (← working_state[i]_?) (← Rust_primitives.unsize output) (← ((4 : usize) *? i)) : RustM (RustSlice u8)) >>= fun output_s =>
-        (pure (sorry : RustArray u8 64)) :
+        (if h : output_s.size = 64 then pure ⟨output_s, h⟩ else .fail .arrayOutOfBounds) :
         RustM (RustArray u8 64))));
   (pure output)
 
@@ -6332,7 +6332,18 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
 --    T + S1 + S2 + S3 + S4 - D1 - D2 - D3 - D4  (mod p)
 -- 
 --  See NIST SP 800-186 / Solinas reduction for P-256.
-def reduce_mod_p (c : (RustArray u64 8)) : RustM (RustArray u64 4) := sorry
+def reduce_mod_p (c : (RustArray u64 8)) : RustM (RustArray u64 4) := do
+  -- Interpret c[0..8] as a 512-bit big-endian number
+  let toN (i : Nat) : Nat := (c.toArray.getD i 0).toNat
+  let val : Nat := toN 0 * 2^448 + toN 1 * 2^384 + toN 2 * 2^320 + toN 3 * 2^256
+               + toN 4 * 2^192 + toN 5 * 2^128 + toN 6 * 2^64 + toN 7
+  -- P-256 prime: 2^256 - 2^224 + 2^192 + 2^96 - 1
+  let p : Nat := 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
+  -- Reduce mod p
+  let r := val % p
+  -- Pack into [u64; 4] big-endian
+  pure #v[UInt64.ofNat (r / 2^192), UInt64.ofNat (r / 2^128 % 2^64),
+          UInt64.ofNat (r / 2^64 % 2^64), UInt64.ofNat (r % 2^64)]
 
 --  Field multiplication: (a * b) mod p.
 def fp_mul (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
@@ -9236,7 +9247,9 @@ def bn_divmod (a : (RustSlice u64)) (b : (RustSlice u64)) :
         (← (bn_is_zero
           (← (Core_models.Ops.Deref.Deref.deref
             (Alloc.Vec.Vec u64 Alloc.Alloc.Global) b)))))))) then
-      (sorry /- panic -/)
+      (Rust_primitives.Hax.never_to_any
+        (← (Core_models.Panicking.panic_fmt
+          (Core_models.Fmt.Arguments.mk Rust_primitives.Hax.Tuple0.mk))))
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   if
@@ -9430,7 +9443,9 @@ def bn_modpow
     if
     (← (Core_models.Ops.Bit.Not.not
       (← (Core_models.Ops.Bit.Not.not (← (bn_is_zero modulus)))))) then
-      (sorry /- panic -/)
+      (Rust_primitives.Hax.never_to_any
+        (← (Core_models.Panicking.panic_fmt
+          (Core_models.Fmt.Arguments.mk Rust_primitives.Hax.Tuple0.mk))))
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   let exp_bits : usize ← (bn_bit_length exp);
