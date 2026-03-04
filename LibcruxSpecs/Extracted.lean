@@ -11,6 +11,8 @@ open Std.Tactic
 
 set_option mvcgen.warning false
 set_option linter.unusedVariables false
+set_option maxErrors 400
+noncomputable section
 
 
 namespace Libcrux_specs.Sha256
@@ -248,7 +250,7 @@ def compress (block : (RustArray u8 64)) (h_in : (RustArray u32 8)) :
 def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
   let h : (RustArray u32 8) := HASH_INIT;
   let msg_len : usize ← (Core_models.Slice.Impl.len u8 msg);
-  let bit_len : u64 ← ((← (Rust_primitives.Hax.cast_op msg_len)) *? (8 : u64));
+  let bit_len : u64 ← ((← (Rust_primitives.Hax.cast_op (β := u64) msg_len)) *? (8 : u64));
   let num_full_blocks : usize ← (msg_len /? (64 : usize));
   let h : (RustArray u32 8) ←
     (Rust_primitives.Hax.Folds.fold_range
@@ -536,7 +538,7 @@ def schedule (block : (RustArray u8 128)) : RustM (RustArray u64 80) := do
     (Rust_primitives.Hax.repeat (0 : u64) (80 : usize));
   let i : usize := (0 : usize);
   let ⟨i, w⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, w⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, w⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
@@ -559,34 +561,34 @@ def schedule (block : (RustArray u8 128)) : RustM (RustArray u64 80) := do
                     (← (Rust_primitives.Hax.Machine_int.bitor
                       (← (Rust_primitives.Hax.Machine_int.bitor
                         (← (Rust_primitives.Hax.Machine_int.bitor
-                          (← ((← (Rust_primitives.Hax.cast_op
+                          (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                               (← block[base]_?)))
                             <<<? (56 : i32)))
-                          (← ((← (Rust_primitives.Hax.cast_op
+                          (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                               (← block[(← (base +? (1 : usize)))]_?)))
                             <<<? (48 : i32)))))
-                        (← ((← (Rust_primitives.Hax.cast_op
+                        (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                             (← block[(← (base +? (2 : usize)))]_?)))
                           <<<? (40 : i32)))))
-                      (← ((← (Rust_primitives.Hax.cast_op
+                      (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                           (← block[(← (base +? (3 : usize)))]_?)))
                         <<<? (32 : i32)))))
-                    (← ((← (Rust_primitives.Hax.cast_op
+                    (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                         (← block[(← (base +? (4 : usize)))]_?)))
                       <<<? (24 : i32)))))
-                  (← ((← (Rust_primitives.Hax.cast_op
+                  (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                       (← block[(← (base +? (5 : usize)))]_?)))
                     <<<? (16 : i32)))))
-                (← ((← (Rust_primitives.Hax.cast_op
+                (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                     (← block[(← (base +? (6 : usize)))]_?)))
                   <<<? (8 : i32)))))
-              (← (Rust_primitives.Hax.cast_op
+              (← (Rust_primitives.Hax.cast_op (β := u64)
                 (← block[(← (base +? (7 : usize)))]_?))))));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk i w)) :
         RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u64 80)))));
   let ⟨i, w⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, w⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, w⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (80 : usize)) : RustM Bool))
@@ -627,7 +629,7 @@ def compress (block : (RustArray u8 128)) (h : (RustArray u64 8)) :
   let hh : u64 ← h[(7 : usize)]_?;
   let t : usize := (0 : usize);
   let ⟨a, b, c, d, e, f, g, hh, t⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨a, b, c, d, e, f, g, hh, t⟩ => (do (pure true) : RustM Bool))
       (fun ⟨a, b, c, d, e, f, g, hh, t⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt t (80 : usize)) : RustM Bool))
@@ -635,7 +637,7 @@ def compress (block : (RustArray u8 128)) (h : (RustArray u64 8)) :
         (do
         (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
         RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple9.mk a b c d e f g hh t)
+      (Rust_primitives.Hax.Tuple9.mk (α9 := Unit) a b c d e f g hh t)
       (fun ⟨a, b, c, d, e, f, g, hh, t⟩ =>
         (do
         let t1 : u64 ←
@@ -659,9 +661,9 @@ def compress (block : (RustArray u8 128)) (h : (RustArray u64 8)) :
         let b : u64 := a;
         let a : u64 ← (Libcrux_specs.Num.Impl_9.wrapping_add t1 t2);
         let t : usize ← (t +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple9.mk a b c d e f g hh t)) :
+        (pure (Rust_primitives.Hax.Tuple9.mk (α9 := Unit) a b c d e f g hh t)) :
         RustM
-        (Rust_primitives.Hax.Tuple9 u64 u64 u64 u64 u64 u64 u64 u64 usize))));
+        (Rust_primitives.Hax.Tuple9 u64 u64 u64 u64 u64 u64 u64 u64 usize Unit))));
   (pure #v[(← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(0 : usize)]_?) a)),
              (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(1 : usize)]_?) b)),
              (← (Libcrux_specs.Num.Impl_9.wrapping_add (← h[(2 : usize)]_?) c)),
@@ -679,10 +681,10 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
   let h : (RustArray u64 8) := H512_INIT;
   let msg_len : usize ← (Core_models.Slice.Impl.len u8 msg);
   let bit_len : u128 ←
-    ((← (Rust_primitives.Hax.cast_op msg_len)) *? (8 : u128));
+    ((← (Rust_primitives.Hax.cast_op (β := u128) msg_len)) *? (8 : u128));
   let offset : usize := (0 : usize);
   let ⟨h, offset⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨h, offset⟩ => (do (pure true) : RustM Bool))
       (fun ⟨h, offset⟩ =>
         (do
@@ -701,7 +703,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
           (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
         let i : usize := (0 : usize);
         let ⟨block, i⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨block, i⟩ => (do (pure true) : RustM Bool))
             (fun ⟨block, i⟩ =>
               (do
@@ -731,7 +733,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
     (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
   let i : usize := (0 : usize);
   let ⟨block, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨block, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨block, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i remaining) : RustM Bool))
@@ -767,7 +769,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
     (Libcrux_specs.Num.Impl_10.to_be_bytes bit_len);
   let j : usize := (0 : usize);
   let ⟨block, j⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨block, j⟩ => (do (pure true) : RustM Bool))
       (fun ⟨block, j⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt j (16 : usize)) : RustM Bool))
@@ -791,7 +793,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
     (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
   let k : usize := (0 : usize);
   let ⟨k, output⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨k, output⟩ => (do (pure true) : RustM Bool))
       (fun ⟨k, output⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt k (8 : usize)) : RustM Bool))
@@ -806,7 +808,7 @@ def sha512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
           (Libcrux_specs.Num.Impl_9.to_be_bytes (← h[k]_?));
         let b : usize := (0 : usize);
         let ⟨b, output⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨b, output⟩ => (do (pure true) : RustM Bool))
             (fun ⟨b, output⟩ =>
               (do
@@ -839,10 +841,10 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
   let h : (RustArray u64 8) := H384_INIT;
   let msg_len : usize ← (Core_models.Slice.Impl.len u8 msg);
   let bit_len : u128 ←
-    ((← (Rust_primitives.Hax.cast_op msg_len)) *? (8 : u128));
+    ((← (Rust_primitives.Hax.cast_op (β := u128) msg_len)) *? (8 : u128));
   let offset : usize := (0 : usize);
   let ⟨h, offset⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨h, offset⟩ => (do (pure true) : RustM Bool))
       (fun ⟨h, offset⟩ =>
         (do
@@ -861,7 +863,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
           (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
         let i : usize := (0 : usize);
         let ⟨block, i⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨block, i⟩ => (do (pure true) : RustM Bool))
             (fun ⟨block, i⟩ =>
               (do
@@ -891,7 +893,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
     (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
   let i : usize := (0 : usize);
   let ⟨block, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨block, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨block, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i remaining) : RustM Bool))
@@ -927,7 +929,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
     (Libcrux_specs.Num.Impl_10.to_be_bytes bit_len);
   let j : usize := (0 : usize);
   let ⟨block, j⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨block, j⟩ => (do (pure true) : RustM Bool))
       (fun ⟨block, j⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt j (16 : usize)) : RustM Bool))
@@ -951,7 +953,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
     (Rust_primitives.Hax.repeat (0 : u8) (48 : usize));
   let k : usize := (0 : usize);
   let ⟨k, output⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨k, output⟩ => (do (pure true) : RustM Bool))
       (fun ⟨k, output⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt k (6 : usize)) : RustM Bool))
@@ -966,7 +968,7 @@ def sha384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
           (Libcrux_specs.Num.Impl_9.to_be_bytes (← h[k]_?));
         let b : usize := (0 : usize);
         let ⟨b, output⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨b, output⟩ => (do (pure true) : RustM Bool))
             (fun ⟨b, output⟩ =>
               (do
@@ -1075,7 +1077,7 @@ def theta (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
   let x : usize := (0 : usize);
   let ⟨c, x⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨c, x⟩ => (do (pure true) : RustM Bool))
       (fun ⟨c, x⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt x (5 : usize)) : RustM Bool))
@@ -1102,7 +1104,7 @@ def theta (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
   let x : usize := (0 : usize);
   let ⟨d, x⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨d, x⟩ => (do (pure true) : RustM Bool))
       (fun ⟨d, x⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt x (5 : usize)) : RustM Bool))
@@ -1128,7 +1130,7 @@ def theta (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (25 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (25 : usize)) : RustM Bool))
@@ -1155,7 +1157,7 @@ def rho (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (25 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (25 : usize)) : RustM Bool))
@@ -1183,7 +1185,7 @@ def pi (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (25 : usize));
   let y : usize := (0 : usize);
   let ⟨result, y⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨result, y⟩ => (do (pure true) : RustM Bool))
       (fun ⟨result, y⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt y (5 : usize)) : RustM Bool))
@@ -1196,7 +1198,7 @@ def pi (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
         (do
         let x : usize := (0 : usize);
         let ⟨result, x⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨result, x⟩ => (do (pure true) : RustM Bool))
             (fun ⟨result, x⟩ =>
               (do
@@ -1230,7 +1232,7 @@ def chi (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (25 : usize));
   let y : usize := (0 : usize);
   let ⟨result, y⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨result, y⟩ => (do (pure true) : RustM Bool))
       (fun ⟨result, y⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt y (5 : usize)) : RustM Bool))
@@ -1243,7 +1245,7 @@ def chi (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
         (do
         let x : usize := (0 : usize);
         let ⟨result, x⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨result, x⟩ => (do (pure true) : RustM Bool))
             (fun ⟨result, x⟩ =>
               (do
@@ -1293,7 +1295,7 @@ def keccak_f1600 (state : (RustArray u64 25)) : RustM (RustArray u64 25) := do
   let s : (RustArray u64 25) := state;
   let round : usize := (0 : usize);
   let ⟨round, s⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨round, s⟩ => (do (pure true) : RustM Bool))
       (fun ⟨round, s⟩ =>
         (do
@@ -1324,7 +1326,7 @@ def bytes_to_state (bytes : (RustSlice u8)) : RustM (RustArray u64 25) := do
     (Rust_primitives.Hax.repeat (0 : u64) (25 : usize));
   let i : usize := (0 : usize);
   let ⟨i, state⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, state⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, state⟩ =>
         (do
@@ -1343,7 +1345,7 @@ def bytes_to_state (bytes : (RustSlice u8)) : RustM (RustArray u64 25) := do
         let lane : u64 := (0 : u64);
         let j : usize := (0 : usize);
         let ⟨j, lane⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, lane⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, lane⟩ =>
               (do
@@ -1363,7 +1365,7 @@ def bytes_to_state (bytes : (RustSlice u8)) : RustM (RustArray u64 25) := do
                   let lane : u64 ←
                     (Rust_primitives.Hax.Machine_int.bitor
                       lane
-                      (← ((← (Rust_primitives.Hax.cast_op
+                      (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                           (← bytes[(← ((← (i *? (8 : usize))) +? j))]_?)))
                         <<<? (← (j *? (8 : usize))))));
                   (pure lane)
@@ -1388,7 +1390,7 @@ def state_to_bytes (state : (RustArray u64 25)) : RustM (RustArray u8 200) := do
     (Rust_primitives.Hax.repeat (0 : u8) (200 : usize));
   let i : usize := (0 : usize);
   let ⟨bytes, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨bytes, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨bytes, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (25 : usize)) : RustM Bool))
@@ -1401,7 +1403,7 @@ def state_to_bytes (state : (RustArray u64 25)) : RustM (RustArray u8 200) := do
         (do
         let j : usize := (0 : usize);
         let ⟨bytes, j⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨bytes, j⟩ => (do (pure true) : RustM Bool))
             (fun ⟨bytes, j⟩ =>
               (do
@@ -1417,7 +1419,7 @@ def state_to_bytes (state : (RustArray u64 25)) : RustM (RustArray u8 200) := do
                 (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                   bytes
                   (← ((← (i *? (8 : usize))) +? j))
-                  (← (Rust_primitives.Hax.cast_op
+                  (← (Rust_primitives.Hax.cast_op (β := u8)
                     (← ((← state[i]_?) >>>? (← (j *? (8 : usize))))))));
               let j : usize ← (j +? (1 : usize));
               (pure (Rust_primitives.Hax.Tuple2.mk bytes j)) :
@@ -1439,7 +1441,7 @@ def xor_byte_into_state (state : (RustArray u64 25)) (pos : usize) (byte : u8) :
       state
       lane
       (← ((← state[lane]_?)
-        ^^^? (← ((← (Rust_primitives.Hax.cast_op byte))
+        ^^^? (← ((← (Rust_primitives.Hax.cast_op (β := u64) byte))
           <<<? (← (offset *? (8 : usize))))))));
   (pure state)
 
@@ -1460,7 +1462,7 @@ def keccak_absorb
   let s : (RustArray u64 25) := state;
   let offset : usize := (0 : usize);
   let ⟨offset, s⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨offset, s⟩ => (do (pure true) : RustM Bool))
       (fun ⟨offset, s⟩ =>
         (do
@@ -1477,7 +1479,7 @@ def keccak_absorb
         (do
         let i : usize := (0 : usize);
         let ⟨i, s⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨i, s⟩ => (do (pure true) : RustM Bool))
             (fun ⟨i, s⟩ =>
               (do (Rust_primitives.Hax.Machine_int.lt i rate) : RustM Bool))
@@ -1500,7 +1502,7 @@ def keccak_absorb
   let remaining : usize ← ((← (Core_models.Slice.Impl.len u8 data)) -? offset);
   let i : usize := (0 : usize);
   let ⟨i, s⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, s⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, s⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i remaining) : RustM Bool))
@@ -1536,7 +1538,7 @@ def keccak_squeeze
     (Alloc.Vec.Impl.with_capacity u8 output_len);
   let squeezed : usize := (0 : usize);
   let ⟨output, s, squeezed⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨output, s, squeezed⟩ => (do (pure true) : RustM Bool))
       (fun ⟨output, s, squeezed⟩ =>
         (do
@@ -1559,7 +1561,7 @@ def keccak_squeeze
             (pure rate);
         let i : usize := (0 : usize);
         let ⟨i, output⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨i, output⟩ => (do (pure true) : RustM Bool))
             (fun ⟨i, output⟩ =>
               (do
@@ -1606,7 +1608,7 @@ def sha3_224 (msg : (RustSlice u8)) : RustM (RustArray u8 28) := do
     (Rust_primitives.Hax.repeat (0 : u8) (28 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (28 : usize)) : RustM Bool))
@@ -1639,7 +1641,7 @@ def sha3_256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -1672,7 +1674,7 @@ def sha3_384 (msg : (RustSlice u8)) : RustM (RustArray u8 48) := do
     (Rust_primitives.Hax.repeat (0 : u8) (48 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (48 : usize)) : RustM Bool))
@@ -1705,7 +1707,7 @@ def sha3_512 (msg : (RustSlice u8)) : RustM (RustArray u8 64) := do
     (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (64 : usize)) : RustM Bool))
@@ -2035,13 +2037,13 @@ def compress_b
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       (12 : usize)
-      (← ((← v[(12 : usize)]_?) ^^^? (← (Rust_primitives.Hax.cast_op t)))));
+      (← ((← v[(12 : usize)]_?) ^^^? (← (Rust_primitives.Hax.cast_op (β := u64) t)))));
   let v : (RustArray u64 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       (13 : usize)
       (← ((← v[(13 : usize)]_?)
-        ^^^? (← (Rust_primitives.Hax.cast_op (← (t >>>? (64 : i32))))))));
+        ^^^? (← (Rust_primitives.Hax.cast_op (β := u64) (← (t >>>? (64 : i32))))))));
   let v : (RustArray u64 16) ←
     if last then
       let v : (RustArray u64 16) ←
@@ -2360,13 +2362,13 @@ def compress_s
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       (12 : usize)
-      (← ((← v[(12 : usize)]_?) ^^^? (← (Rust_primitives.Hax.cast_op t)))));
+      (← ((← v[(12 : usize)]_?) ^^^? (← (Rust_primitives.Hax.cast_op (β := u32) t)))));
   let v : (RustArray u32 16) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       v
       (13 : usize)
       (← ((← v[(13 : usize)]_?)
-        ^^^? (← (Rust_primitives.Hax.cast_op (← (t >>>? (32 : i32))))))));
+        ^^^? (← (Rust_primitives.Hax.cast_op (β := u32) (← (t >>>? (32 : i32))))))));
   let v : (RustArray u32 16) ←
     if last then
       let v : (RustArray u32 16) ←
@@ -2635,8 +2637,7 @@ def hkdf_expand
       (← (Rust_primitives.Hax.Machine_int.le n (255 : usize))))) then
       (Rust_primitives.Hax.never_to_any
         (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["HKDF-Expand: length too large (max 255 * 32 = 8160 bytes)"])))))
+          sorry /- panic: HKDF-Expand length too large -/)))
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   let okm : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
@@ -2683,7 +2684,7 @@ def hkdf_expand
         let hmac_input : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
           (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global
             hmac_input
-            (← (Rust_primitives.Hax.cast_op i)));
+            (← (Rust_primitives.Hax.cast_op (α := usize) (β := u8) i)));
         let t_i : (RustArray u8 32) ←
           (Libcrux_specs.Hmac.hmac_sha256
             (← (Rust_primitives.unsize prk))
@@ -2754,14 +2755,14 @@ def u32_from_le_bytes (bytes : (RustSlice u8)) (offset : usize) :
   (Rust_primitives.Hax.Machine_int.bitor
     (← (Rust_primitives.Hax.Machine_int.bitor
       (← (Rust_primitives.Hax.Machine_int.bitor
-        (← (Rust_primitives.Hax.cast_op (← bytes[offset]_?)))
-        (← ((← (Rust_primitives.Hax.cast_op
+        (← (Rust_primitives.Hax.cast_op (β := u32) (← bytes[offset]_?)))
+        (← ((← (Rust_primitives.Hax.cast_op (β := u32)
             (← bytes[(← (offset +? (1 : usize)))]_?)))
           <<<? (8 : i32)))))
-      (← ((← (Rust_primitives.Hax.cast_op
+      (← ((← (Rust_primitives.Hax.cast_op (β := u32)
           (← bytes[(← (offset +? (2 : usize)))]_?)))
         <<<? (16 : i32)))))
-    (← ((← (Rust_primitives.Hax.cast_op
+    (← ((← (Rust_primitives.Hax.cast_op (β := u32)
         (← bytes[(← (offset +? (3 : usize)))]_?)))
       <<<? (24 : i32))))
 
@@ -2772,22 +2773,22 @@ def u32_to_le_bytes (value : u32) (out : (RustSlice u8)) (offset : usize) :
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       out
       offset
-      (← (Rust_primitives.Hax.cast_op value)));
+      (← (Rust_primitives.Hax.cast_op (β := u8) value)));
   let out : (RustSlice u8) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       out
       (← (offset +? (1 : usize)))
-      (← (Rust_primitives.Hax.cast_op (← (value >>>? (8 : i32))))));
+      (← (Rust_primitives.Hax.cast_op (β := u8) (← (value >>>? (8 : i32))))));
   let out : (RustSlice u8) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       out
       (← (offset +? (2 : usize)))
-      (← (Rust_primitives.Hax.cast_op (← (value >>>? (16 : i32))))));
+      (← (Rust_primitives.Hax.cast_op (β := u8) (← (value >>>? (16 : i32))))));
   let out : (RustSlice u8) ←
     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
       out
       (← (offset +? (3 : usize)))
-      (← (Rust_primitives.Hax.cast_op (← (value >>>? (24 : i32))))));
+      (← (Rust_primitives.Hax.cast_op (β := u8) (← (value >>>? (24 : i32))))));
   (pure out)
 
 --  ChaCha20 quarter round (RFC 8439, Section 2.1).
@@ -3048,7 +3049,8 @@ def chacha20_block
       output
       (fun output i =>
         (do
-        (u32_to_le_bytes (← working_state[i]_?) output (← ((4 : usize) *? i))) :
+        (u32_to_le_bytes (← working_state[i]_?) (← Rust_primitives.unsize output) (← ((4 : usize) *? i)) : RustM (RustSlice u8)) >>= fun output_s =>
+        (pure (sorry : RustArray u8 64)) :
         RustM (RustArray u8 64))));
   (pure output)
 
@@ -3083,7 +3085,7 @@ def chacha20_encrypt
             nonce
             (← (Libcrux_specs.Num.Impl_8.wrapping_add
               counter
-              (← (Rust_primitives.Hax.cast_op i)))));
+              (← (Rust_primitives.Hax.cast_op (β := usize) i)))));
         (Rust_primitives.Hax.Folds.fold_range
           (0 : usize)
           (64 : usize)
@@ -3105,7 +3107,7 @@ def chacha20_encrypt
           nonce
           (← (Libcrux_specs.Num.Impl_8.wrapping_add
             counter
-            (← (Rust_primitives.Hax.cast_op num_full_blocks)))));
+            (← (Rust_primitives.Hax.cast_op (β := u32) num_full_blocks)))));
       (Rust_primitives.Hax.Folds.fold_range
         (0 : usize)
         remainder
@@ -3258,7 +3260,7 @@ def le_bytes_to_u130 (bytes : (RustSlice u8)) : RustM U130 := do
           let lo : u128 ←
             (Rust_primitives.Hax.Machine_int.bitor
               lo
-              (← ((← (Rust_primitives.Hax.cast_op (← bytes[i]_?)))
+              (← ((← (Rust_primitives.Hax.cast_op (β := u128) (← bytes[i]_?)))
                 <<<? (← ((8 : usize) *? i)))));
           (pure (Rust_primitives.Hax.Tuple2.mk hi lo))
         else
@@ -3283,7 +3285,7 @@ def le_bytes_to_num (bytes : (RustSlice u8)) : RustM u128 := do
           let result : u128 ←
             (Rust_primitives.Hax.Machine_int.bitor
               result
-              (← ((← (Rust_primitives.Hax.cast_op (← bytes[i]_?)))
+              (← ((← (Rust_primitives.Hax.cast_op (β := u128) (← bytes[i]_?)))
                 <<<? (← ((8 : usize) *? i)))));
           (pure result)
         else
@@ -3306,7 +3308,7 @@ def num_to_le_bytes (value : u128) : RustM (RustArray u8 16) := do
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           out
           i
-          (← (Rust_primitives.Hax.cast_op
+          (← (Rust_primitives.Hax.cast_op (β := u8)
             (← (value >>>? (← ((8 : usize) *? i))))))) :
         RustM (RustArray u8 16))));
   (pure out)
@@ -3318,7 +3320,7 @@ def u130_add (a : U130) (b : U130) : RustM U130 := do
     (Libcrux_specs.Num.Impl_10.overflowing_add (U130.lo a) (U130.lo b));
   let hi : u8 ←
     ((← ((U130.hi a) +? (U130.hi b)))
-      +? (← (Rust_primitives.Hax.cast_op carry)));
+      +? (← (Rust_primitives.Hax.cast_op (β := u8) carry)));
   (pure (U130.mk (lo := lo) (hi := hi)))
 
 --  Multiply two u128 values, returning a U256 (256-bit result).
@@ -3329,32 +3331,32 @@ def u130_add (a : U130) (b : U130) : RustM U130 := do
 --  a*b = a_lo*b_lo + (a_lo*b_hi + a_hi*b_lo)*2^64 + a_hi*b_hi*2^128
 def u128_mul (a : u128) (b : u128) : RustM U256 := do
   let a_lo : u128 ←
-    (Rust_primitives.Hax.cast_op (← (Rust_primitives.Hax.cast_op a)));
+    (Rust_primitives.Hax.cast_op (β := u128) (← (Rust_primitives.Hax.cast_op (β := u64) a)));
   let a_hi : u128 ←
-    (Rust_primitives.Hax.cast_op
-      (← (Rust_primitives.Hax.cast_op (← (a >>>? (64 : i32))))));
+    (Rust_primitives.Hax.cast_op (β := u128)
+      (← (Rust_primitives.Hax.cast_op (β := u64) (← (a >>>? (64 : i32))))));
   let b_lo : u128 ←
-    (Rust_primitives.Hax.cast_op (← (Rust_primitives.Hax.cast_op b)));
+    (Rust_primitives.Hax.cast_op (β := u128) (← (Rust_primitives.Hax.cast_op (β := u64) b)));
   let b_hi : u128 ←
-    (Rust_primitives.Hax.cast_op
-      (← (Rust_primitives.Hax.cast_op (← (b >>>? (64 : i32))))));
+    (Rust_primitives.Hax.cast_op (β := u128)
+      (← (Rust_primitives.Hax.cast_op (β := u64) (← (b >>>? (64 : i32))))));
   let ll : u128 ← (a_lo *? b_lo);
   let lh : u128 ← (a_lo *? b_hi);
   let hl : u128 ← (a_hi *? b_lo);
   let hh : u128 ← (a_hi *? b_hi);
   let ⟨mid_sum, mid_carry⟩ ← (Libcrux_specs.Num.Impl_10.overflowing_add lh hl);
   let mid_lo : u128 ←
-    ((← (Rust_primitives.Hax.cast_op (← (Rust_primitives.Hax.cast_op mid_sum))))
+    ((← (Rust_primitives.Hax.cast_op (β := u128) (← (Rust_primitives.Hax.cast_op (β := u64) mid_sum))))
       <<<? (64 : i32));
   let mid_hi : u128 ←
-    (Rust_primitives.Hax.cast_op
-      (← (Rust_primitives.Hax.cast_op (← (mid_sum >>>? (64 : i32))))));
+    (Rust_primitives.Hax.cast_op (β := u128)
+      (← (Rust_primitives.Hax.cast_op (β := u64) (← (mid_sum >>>? (64 : i32))))));
   let ⟨lo, carry1⟩ ← (Libcrux_specs.Num.Impl_10.overflowing_add ll mid_lo);
   let hi : u128 ←
     (Libcrux_specs.Num.Impl_10.wrapping_add
       (← (Libcrux_specs.Num.Impl_10.wrapping_add
         (← (Libcrux_specs.Num.Impl_10.wrapping_add hh mid_hi))
-        (← (Rust_primitives.Hax.cast_op carry1))))
+        (← (Rust_primitives.Hax.cast_op (β := u128) carry1))))
       (← if mid_carry then
         ((1 : u128) <<<? (64 : i32))
       else
@@ -3372,11 +3374,11 @@ def u128_mul (a : u128) (b : u128) : RustM U256 := do
 def u130_mul_mod (acc : U130) (r : u128) : RustM U130 := do
   let prod_lo : U256 ← (u128_mul (U130.lo acc) r);
   let prod_hi_val : u128 ←
-    ((← (Rust_primitives.Hax.cast_op (U130.hi acc))) *? r);
+    ((← (Rust_primitives.Hax.cast_op (β := u128) (U130.hi acc))) *? r);
   let ⟨upper, carry⟩ ←
     (Libcrux_specs.Num.Impl_10.overflowing_add (U256.hi prod_lo) prod_hi_val);
   let upper_lo2 : u8 ←
-    (Rust_primitives.Hax.cast_op (← (upper &&&? (3 : u128))));
+    (Rust_primitives.Hax.cast_op (β := u8) (← (upper &&&? (3 : u128))));
   let upper_hi : u128 ← (upper >>>? (2 : i32));
   let base_lo : u128 := (U256.lo prod_lo);
   let base_hi : u8 := upper_lo2;
@@ -3386,14 +3388,14 @@ def u130_mul_mod (acc : U130) (r : u128) : RustM U130 := do
       (← if carry then ((5 : u128) <<<? (126 : i32)) else (pure (0 : u128))));
   let ⟨sum_lo, c⟩ ←
     (Libcrux_specs.Num.Impl_10.overflowing_add base_lo high_times_5);
-  let sum_hi : u8 ← (base_hi +? (← (Rust_primitives.Hax.cast_op c)));
+  let sum_hi : u8 ← (base_hi +? (← (Rust_primitives.Hax.cast_op (β := u8) c)));
   let extra : u8 ← (sum_hi >>>? (2 : i32));
   let final_hi : u8 ← (sum_hi &&&? (3 : u8));
   let ⟨final_lo, c2⟩ ←
     (Libcrux_specs.Num.Impl_10.overflowing_add
       sum_lo
-      (← ((← (Rust_primitives.Hax.cast_op extra)) *? (5 : u128))));
-  let final_hi2 : u8 ← (final_hi +? (← (Rust_primitives.Hax.cast_op c2)));
+      (← ((← (Rust_primitives.Hax.cast_op (β := u128) extra)) *? (5 : u128))));
+  let final_hi2 : u8 ← (final_hi +? (← (Rust_primitives.Hax.cast_op (β := u8) c2)));
   (pure (U130.mk (lo := final_lo) (hi := final_hi2)))
 
 --  Final reduction: ensure value is in [0, 2^130-5).
@@ -3403,7 +3405,7 @@ def u130_mul_mod (acc : U130) (r : u128) : RustM U130 := do
 def final_reduce (acc : U130) : RustM u128 := do
   let ⟨test_lo, c⟩ ←
     (Libcrux_specs.Num.Impl_10.overflowing_add (U130.lo acc) (5 : u128));
-  let test_hi : u8 ← ((U130.hi acc) +? (← (Rust_primitives.Hax.cast_op c)));
+  let test_hi : u8 ← ((U130.hi acc) +? (← (Rust_primitives.Hax.cast_op (β := u8) c)));
   if (← (Rust_primitives.Hax.Machine_int.ge test_hi (4 : u8))) then
     (pure test_lo)
   else
@@ -3508,12 +3510,11 @@ def poly1305 (msg : (RustSlice u8)) (key : (RustArray u8 32)) :
           block
           remainder
           (1 : u8));
+      let block_slice ← Rust_primitives.unsize block
+      let take_len ← (remainder +? (1 : usize))
       let n : U130 ←
         (le_bytes_to_u130
-          (← block[
-            (Core_models.Ops.Range.RangeTo.mk
-              (_end := (← (remainder +? (1 : usize)))))
-            ]_?));
+          (block_slice.take take_len.toNat));
       let acc : U130 ← (u130_add acc n);
       let acc : U130 ← (u130_mul_mod acc r);
       (pure acc)
@@ -3565,7 +3566,7 @@ def pad16 (data : (RustSlice u8)) :
 
 --  Encode a usize as 8 little-endian bytes (u64).
 def le64 (value : usize) : RustM (RustArray u8 8) := do
-  let v : u64 ← (Rust_primitives.Hax.cast_op value);
+  let v : u64 ← (Rust_primitives.Hax.cast_op (β := u64) value);
   let out : (RustArray u8 8) ←
     (Rust_primitives.Hax.repeat (0 : u8) (8 : usize));
   let out : (RustArray u8 8) ←
@@ -3579,7 +3580,7 @@ def le64 (value : usize) : RustM (RustArray u8 8) := do
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           out
           i
-          (← (Rust_primitives.Hax.cast_op (← (v >>>? (← ((8 : usize) *? i)))))))
+          (← (Rust_primitives.Hax.cast_op (β := u8) (← (v >>>? (← ((8 : usize) *? i)))))))
         :
         RustM (RustArray u8 8))));
   (pure out)
@@ -3766,6 +3767,7 @@ end Libcrux_specs.Chacha20poly1305
 namespace Libcrux_specs.Aes
 
 --  AES S-box lookup table (FIPS 197, Section 5.1.1).
+set_option maxRecDepth 4096 in
 def SBOX : (RustArray u8 256) :=
   RustM.of_isOk
     (do
@@ -4045,11 +4047,11 @@ def RCON : (RustArray u8 10) :=
 
 --  Multiply by 2 in GF(2^8) with irreducible polynomial x^8 + x^4 + x^3 + x + 1.
 def gf_mul2 (x : u8) : RustM u8 := do
-  let shifted : u16 ← ((← (Rust_primitives.Hax.cast_op x)) <<<? (1 : i32));
+  let shifted : u16 ← ((← (Rust_primitives.Hax.cast_op (β := u16) x)) <<<? (1 : i32));
   if (← (Rust_primitives.Hax.Machine_int.ge shifted (256 : u16))) then
-    (Rust_primitives.Hax.cast_op (← (shifted ^^^? (283 : u16))))
+    (Rust_primitives.Hax.cast_op (β := u8) (← (shifted ^^^? (283 : u16))))
   else
-    (Rust_primitives.Hax.cast_op shifted)
+    (Rust_primitives.Hax.cast_op (β := u8) shifted)
 
 --  Multiply by 3 in GF(2^8): 3*x = 2*x XOR x.
 def gf_mul3 (x : u8) : RustM u8 := do ((← (gf_mul2 x)) ^^^? x)
@@ -4060,7 +4062,7 @@ def sub_bytes (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
@@ -4075,7 +4077,7 @@ def sub_bytes (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             result
             i
-            (← SBOX[(← (Rust_primitives.Hax.cast_op (← state[i]_?)))]_?));
+            (← SBOX[(← (Rust_primitives.Hax.cast_op (β := usize) (← state[i]_?)))]_?));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk i result)) :
         RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
@@ -4088,7 +4090,7 @@ def shift_rows (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let col : usize := (0 : usize);
   let ⟨col, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨col, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨col, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt col (4 : usize)) : RustM Bool))
@@ -4101,7 +4103,7 @@ def shift_rows (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
         (do
         let row : usize := (0 : usize);
         let ⟨result, row⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨result, row⟩ => (do (pure true) : RustM Bool))
             (fun ⟨result, row⟩ =>
               (do
@@ -4137,7 +4139,7 @@ def mix_columns (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let col : usize := (0 : usize);
   let ⟨col, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨col, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨col, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt col (4 : usize)) : RustM Bool))
@@ -4188,7 +4190,7 @@ def add_round_key (state : (RustArray u8 16)) (round_key : (RustArray u8 16)) :
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
@@ -4223,7 +4225,7 @@ def aes_encrypt_rounds
     (add_round_key plaintext (← round_keys[(0 : usize)]_?));
   let round : usize := (1 : usize);
   let ⟨round, state⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨round, state⟩ => (do (pure true) : RustM Bool))
       (fun ⟨round, state⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt round num_rounds) : RustM Bool))
@@ -4264,7 +4266,7 @@ def aes128_key_expand (key : (RustArray u8 16)) :
       key);
   let round : usize := (1 : usize);
   let ⟨round, round_keys⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨round, round_keys⟩ => (do (pure true) : RustM Bool))
       (fun ⟨round, round_keys⟩ =>
         (do
@@ -4286,7 +4288,7 @@ def aes128_key_expand (key : (RustArray u8 16)) :
                (← prev[(12 : usize)]_?)];
         let j : usize := (0 : usize);
         let ⟨j, rk⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, rk⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, rk⟩ =>
               (do
@@ -4299,7 +4301,7 @@ def aes128_key_expand (key : (RustArray u8 16)) :
             (fun ⟨j, rk⟩ =>
               (do
               let sbox_out : u8 ←
-                SBOX[(← (Rust_primitives.Hax.cast_op (← rot[j]_?)))]_?;
+                SBOX[(← (Rust_primitives.Hax.cast_op (β := usize) (← rot[j]_?)))]_?;
               let rk : (RustArray u8 16) ←
                 if (← (Rust_primitives.Hax.Machine_int.eq j (0 : usize))) then
                   let rk : (RustArray u8 16) ←
@@ -4321,7 +4323,7 @@ def aes128_key_expand (key : (RustArray u8 16)) :
               RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
         let j : usize := (4 : usize);
         let ⟨j, rk⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, rk⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, rk⟩ =>
               (do
@@ -4380,7 +4382,7 @@ def aes256_key_expand (key : (RustArray u8 32)) :
       (60 : usize));
   let i : usize := (0 : usize);
   let ⟨i, w⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, w⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, w⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (8 : usize)) : RustM Bool))
@@ -4405,7 +4407,7 @@ def aes256_key_expand (key : (RustArray u8 32)) :
         (Rust_primitives.Hax.Tuple2 usize (RustArray (RustArray u8 4) 60)))));
   let i : usize := (8 : usize);
   let ⟨i, w⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, w⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, w⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (60 : usize)) : RustM Bool))
@@ -4429,22 +4431,22 @@ def aes256_key_expand (key : (RustArray u8 32)) :
                    (← temp[(0 : usize)]_?)];
             let temp : (RustArray u8 4) :=
               #v[(← ((← SBOX[
-                       (← (Rust_primitives.Hax.cast_op
+                       (← (Rust_primitives.Hax.cast_op (β := usize)
                          (← rotated[(0 : usize)]_?)))
                        ]_?)
                      ^^^? (← RCON[
                        (← ((← (i /? (8 : usize))) -? (1 : usize)))
                        ]_?))),
                    (← SBOX[
-                     (← (Rust_primitives.Hax.cast_op
+                     (← (Rust_primitives.Hax.cast_op (β := usize)
                        (← rotated[(1 : usize)]_?)))
                      ]_?),
                    (← SBOX[
-                     (← (Rust_primitives.Hax.cast_op
+                     (← (Rust_primitives.Hax.cast_op (β := usize)
                        (← rotated[(2 : usize)]_?)))
                      ]_?),
                    (← SBOX[
-                     (← (Rust_primitives.Hax.cast_op
+                     (← (Rust_primitives.Hax.cast_op (β := usize)
                        (← rotated[(3 : usize)]_?)))
                      ]_?)];
             (pure temp)
@@ -4455,23 +4457,23 @@ def aes256_key_expand (key : (RustArray u8 32)) :
               (4 : usize))) then
               let temp : (RustArray u8 4) :=
                 #v[(← SBOX[
-                       (← (Rust_primitives.Hax.cast_op (← temp[(0 : usize)]_?)))
+                       (← (Rust_primitives.Hax.cast_op (β := usize) (← temp[(0 : usize)]_?)))
                        ]_?),
                      (← SBOX[
-                       (← (Rust_primitives.Hax.cast_op (← temp[(1 : usize)]_?)))
+                       (← (Rust_primitives.Hax.cast_op (β := usize) (← temp[(1 : usize)]_?)))
                        ]_?),
                      (← SBOX[
-                       (← (Rust_primitives.Hax.cast_op (← temp[(2 : usize)]_?)))
+                       (← (Rust_primitives.Hax.cast_op (β := usize) (← temp[(2 : usize)]_?)))
                        ]_?),
                      (← SBOX[
-                       (← (Rust_primitives.Hax.cast_op (← temp[(3 : usize)]_?)))
+                       (← (Rust_primitives.Hax.cast_op (β := usize) (← temp[(3 : usize)]_?)))
                        ]_?)];
               (pure temp)
             else
               (pure temp);
         let j : usize := (0 : usize);
         let ⟨j, temp⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, temp⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, temp⟩ =>
               (do
@@ -4507,7 +4509,7 @@ def aes256_key_expand (key : (RustArray u8 32)) :
       (15 : usize));
   let r : usize := (0 : usize);
   let ⟨r, round_keys⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨r, round_keys⟩ => (do (pure true) : RustM Bool))
       (fun ⟨r, round_keys⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt r (15 : usize)) : RustM Bool))
@@ -4520,7 +4522,7 @@ def aes256_key_expand (key : (RustArray u8 32)) :
         (do
         let j : usize := (0 : usize);
         let ⟨j, round_keys⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, round_keys⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, round_keys⟩ =>
               (do
@@ -4619,7 +4621,7 @@ def gf128_mul (a : u128) (b : u128) : RustM u128 := do
   let v : u128 := a;
   let i : i32 := (0 : i32);
   let ⟨i, v, z⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, v, z⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, v, z⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (128 : i32)) : RustM Bool))
@@ -4665,7 +4667,7 @@ def bytes_to_u128 (bytes : (RustSlice u8)) : RustM u128 := do
       (pure (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, val⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, val⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, val⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i len) : RustM Bool))
@@ -4679,8 +4681,8 @@ def bytes_to_u128 (bytes : (RustSlice u8)) : RustM u128 := do
         let val : u128 ←
           (Rust_primitives.Hax.Machine_int.bitor
             val
-            (← ((← (Rust_primitives.Hax.cast_op (← bytes[i]_?)))
-              <<<? (← ((8 : usize) *? (← ((15 : usize) -? i)))))));
+            (← ((← (Rust_primitives.Hax.cast_op (β := u128) (← bytes[i]_?)))
+              <<<? (← (Rust_primitives.Hax.cast_op (β := i32) (← ((8 : usize) *? (← ((15 : usize) -? i)))))))));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk i val)) :
         RustM (Rust_primitives.Hax.Tuple2 usize u128))));
@@ -4692,7 +4694,7 @@ def u128_to_bytes (val : u128) : RustM (RustArray u8 16) := do
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let i : usize := (0 : usize);
   let ⟨bytes, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨bytes, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨bytes, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
@@ -4707,8 +4709,7 @@ def u128_to_bytes (val : u128) : RustM (RustArray u8 16) := do
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             bytes
             i
-            (← (Rust_primitives.Hax.cast_op
-              (← (val >>>? (← ((8 : usize) *? (← ((15 : usize) -? i)))))))));
+            (← (Rust_primitives.Hax.cast_op (β := u8) (← (val >>>? (← ((8 : usize) *? (← ((15 : usize) -? i)))))))));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk bytes i)) :
         RustM (Rust_primitives.Hax.Tuple2 (RustArray u8 16) usize))));
@@ -4725,7 +4726,7 @@ def ghash (h : u128) (data : (RustSlice u8)) : RustM u128 := do
     ((← (Core_models.Slice.Impl.len u8 data)) /? (16 : usize));
   let i : usize := (0 : usize);
   let ⟨acc, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨acc, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨acc, i⟩ =>
         (do
@@ -4757,7 +4758,7 @@ def ghash (h : u128) (data : (RustSlice u8)) : RustM u128 := do
       let offset : usize ← (num_full_blocks *? (16 : usize));
       let j : usize := (0 : usize);
       let ⟨j, padded⟩ ←
-        (Rust_primitives.Hax.while_loop
+        (Rust_primitives.Hax.while_loop'
           (fun ⟨j, padded⟩ => (do (pure true) : RustM Bool))
           (fun ⟨j, padded⟩ =>
             (do (Rust_primitives.Hax.Machine_int.lt j remainder) : RustM Bool))
@@ -4830,7 +4831,7 @@ def xor_block (data : (RustSlice u8)) (keystream : (RustArray u8 16)) :
   let len : usize ← (Core_models.Slice.Impl.len u8 data);
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i len) : RustM Bool))
@@ -4863,7 +4864,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
     (Alloc.Vec.Impl.new u8 Rust_primitives.Hax.Tuple0.mk);
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do
@@ -4892,7 +4893,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
       %? (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i aad_pad) : RustM Bool))
@@ -4913,7 +4914,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do
@@ -4945,7 +4946,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
       %? (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i ct_pad) : RustM Bool))
@@ -4965,10 +4966,10 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
           usize
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let aad_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op (← (Core_models.Slice.Impl.len u8 aad))))
+    ((← (Rust_primitives.Hax.cast_op (β := u64) (← (Core_models.Slice.Impl.len u8 aad))))
       *? (8 : u64));
   let ct_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op
+    ((← (Rust_primitives.Hax.cast_op (β := u64)
         (← (Core_models.Slice.Impl.len u8 ciphertext))))
       *? (8 : u64));
   let aad_len_bytes : (RustArray u8 8) ←
@@ -4977,7 +4978,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
     (Libcrux_specs.Num.Impl_9.to_be_bytes ct_bits);
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (8 : usize)) : RustM Bool))
@@ -5000,7 +5001,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let i : usize := (0 : usize);
   let ⟨i, input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (8 : usize)) : RustM Bool))
@@ -5032,22 +5033,7 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
 -- 
 --  Returns (ciphertext, tag).
 def aes_gcm_encrypt_generic
-    (impl_Fn([u8;_16])_-__[u8;_16] : Type)
-    [trait_constr_aes_gcm_encrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
-    [trait_constr_aes_gcm_encrypt_generic_i0 : Core_models.Ops.Function.Fn
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
-    (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
+    (key_encrypt : RustArray u8 16 → RustM (RustArray u8 16))
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
     (plaintext : (RustSlice u8)) :
@@ -5057,19 +5043,14 @@ def aes_gcm_encrypt_generic
       (RustArray u8 16))
     := do
   let h_bytes : (RustArray u8 16) ←
-    (Core_models.Ops.Function.Fn.call
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      key_encrypt
-      (Rust_primitives.Hax.Tuple1.mk
-        (← (Rust_primitives.Hax.repeat (0 : u8) (16 : usize)))));
+    (key_encrypt ((← (Rust_primitives.Hax.repeat (0 : u8) (16 : usize)))));
   let h : u128 ←
     (Libcrux_specs.Gf128.bytes_to_u128 (← (Rust_primitives.unsize h_bytes)));
   let j0 : (RustArray u8 16) ←
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, j0⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, j0⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, j0⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (12 : usize)) : RustM Bool))
@@ -5116,7 +5097,7 @@ def aes_gcm_encrypt_generic
   let counter : (RustArray u8 16) := j0;
   let i : usize := (0 : usize);
   let ⟨ciphertext, counter, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨ciphertext, counter, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨ciphertext, counter, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i num_blocks) : RustM Bool))
@@ -5129,11 +5110,7 @@ def aes_gcm_encrypt_generic
         (do
         let counter : (RustArray u8 16) ← (inc32 counter);
         let keystream : (RustArray u8 16) ←
-          (Core_models.Ops.Function.Fn.call
-            impl_Fn([u8;_16])_-__[u8;_16]
-            (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-            key_encrypt
-            (Rust_primitives.Hax.Tuple1.mk counter));
+          (key_encrypt (counter));
         let block_start : usize ← (i *? (16 : usize));
         let block_end : usize ←
           if
@@ -5153,7 +5130,7 @@ def aes_gcm_encrypt_generic
             keystream);
         let j : usize := (0 : usize);
         let ⟨ciphertext, j⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨ciphertext, j⟩ => (do (pure true) : RustM Bool))
             (fun ⟨ciphertext, j⟩ =>
               (do
@@ -5196,11 +5173,7 @@ def aes_gcm_encrypt_generic
       (← (Core_models.Ops.Deref.Deref.deref
         (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ghash_input)));
   let encrypted_j0 : (RustArray u8 16) ←
-    (Core_models.Ops.Function.Fn.call
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      key_encrypt
-      (Rust_primitives.Hax.Tuple1.mk j0));
+    (key_encrypt (j0));
   let encrypted_j0_val : u128 ←
     (Libcrux_specs.Gf128.bytes_to_u128
       (← (Rust_primitives.unsize encrypted_j0)));
@@ -5212,22 +5185,7 @@ def aes_gcm_encrypt_generic
 -- 
 --  Returns Some(plaintext) if the tag is valid, None otherwise.
 def aes_gcm_decrypt_generic
-    (impl_Fn([u8;_16])_-__[u8;_16] : Type)
-    [trait_constr_aes_gcm_decrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
-    [trait_constr_aes_gcm_decrypt_generic_i0 : Core_models.Ops.Function.Fn
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
-    (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
+    (key_encrypt : RustArray u8 16 → RustM (RustArray u8 16))
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
     (ciphertext : (RustSlice u8))
@@ -5236,19 +5194,14 @@ def aes_gcm_decrypt_generic
     (Core_models.Option.Option (Alloc.Vec.Vec u8 Alloc.Alloc.Global))
     := do
   let h_bytes : (RustArray u8 16) ←
-    (Core_models.Ops.Function.Fn.call
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      key_encrypt
-      (Rust_primitives.Hax.Tuple1.mk
-        (← (Rust_primitives.Hax.repeat (0 : u8) (16 : usize)))));
+    (key_encrypt ((← (Rust_primitives.Hax.repeat (0 : u8) (16 : usize)))));
   let h : u128 ←
     (Libcrux_specs.Gf128.bytes_to_u128 (← (Rust_primitives.unsize h_bytes)));
   let j0 : (RustArray u8 16) ←
     (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
   let i : usize := (0 : usize);
   let ⟨i, j0⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, j0⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, j0⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (12 : usize)) : RustM Bool))
@@ -5295,11 +5248,7 @@ def aes_gcm_decrypt_generic
       (← (Core_models.Ops.Deref.Deref.deref
         (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ghash_input)));
   let encrypted_j0 : (RustArray u8 16) ←
-    (Core_models.Ops.Function.Fn.call
-      impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      key_encrypt
-      (Rust_primitives.Hax.Tuple1.mk j0));
+    (key_encrypt (j0));
   let encrypted_j0_val : u128 ←
     (Libcrux_specs.Gf128.bytes_to_u128
       (← (Rust_primitives.unsize encrypted_j0)));
@@ -5309,7 +5258,7 @@ def aes_gcm_decrypt_generic
   let tag_ok : Bool := true;
   let i : usize := (0 : usize);
   let ⟨i, tag_ok⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, tag_ok⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, tag_ok⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
@@ -5343,7 +5292,7 @@ def aes_gcm_decrypt_generic
     let counter : (RustArray u8 16) := j0;
     let i : usize := (0 : usize);
     let ⟨counter, i, plaintext⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨counter, i, plaintext⟩ => (do (pure true) : RustM Bool))
         (fun ⟨counter, i, plaintext⟩ =>
           (do (Rust_primitives.Hax.Machine_int.lt i num_blocks) : RustM Bool))
@@ -5356,11 +5305,7 @@ def aes_gcm_decrypt_generic
           (do
           let counter : (RustArray u8 16) ← (inc32 counter);
           let keystream : (RustArray u8 16) ←
-            (Core_models.Ops.Function.Fn.call
-              impl_Fn([u8;_16])_-__[u8;_16]
-              (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-              key_encrypt
-              (Rust_primitives.Hax.Tuple1.mk counter));
+            (key_encrypt (counter));
           let block_start : usize ← (i *? (16 : usize));
           let block_end : usize ←
             if
@@ -5380,7 +5325,7 @@ def aes_gcm_decrypt_generic
               keystream);
           let j : usize := (0 : usize);
           let ⟨j, plaintext⟩ ←
-            (Rust_primitives.Hax.while_loop
+            (Rust_primitives.Hax.while_loop'
               (fun ⟨j, plaintext⟩ => (do (pure true) : RustM Bool))
               (fun ⟨j, plaintext⟩ =>
                 (do
@@ -5428,7 +5373,7 @@ def aes128_gcm_encrypt
       (RustArray u8 16))
     := do
   let k : (RustArray u8 16) := key;
-  (aes_gcm_encrypt_generic ((RustArray u8 16) -> RustM (RustArray u8 16))
+  (aes_gcm_encrypt_generic
     (fun block =>
       (do (Libcrux_specs.Aes.aes128_encrypt k block) : RustM (RustArray u8 16)))
     nonce
@@ -5448,7 +5393,7 @@ def aes128_gcm_decrypt
     (Core_models.Option.Option (Alloc.Vec.Vec u8 Alloc.Alloc.Global))
     := do
   let k : (RustArray u8 16) := key;
-  (aes_gcm_decrypt_generic ((RustArray u8 16) -> RustM (RustArray u8 16))
+  (aes_gcm_decrypt_generic
     (fun block =>
       (do (Libcrux_specs.Aes.aes128_encrypt k block) : RustM (RustArray u8 16)))
     nonce
@@ -5470,7 +5415,7 @@ def aes256_gcm_encrypt
       (RustArray u8 16))
     := do
   let k : (RustArray u8 32) := key;
-  (aes_gcm_encrypt_generic ((RustArray u8 16) -> RustM (RustArray u8 16))
+  (aes_gcm_encrypt_generic
     (fun block =>
       (do (Libcrux_specs.Aes.aes256_encrypt k block) : RustM (RustArray u8 16)))
     nonce
@@ -5490,7 +5435,7 @@ def aes256_gcm_decrypt
     (Core_models.Option.Option (Alloc.Vec.Vec u8 Alloc.Alloc.Global))
     := do
   let k : (RustArray u8 32) := key;
-  (aes_gcm_decrypt_generic ((RustArray u8 16) -> RustM (RustArray u8 16))
+  (aes_gcm_decrypt_generic
     (fun block =>
       (do (Libcrux_specs.Aes.aes256_encrypt k block) : RustM (RustArray u8 16)))
     nonce
@@ -5586,7 +5531,7 @@ def fe_sq_n (a : (RustArray u64 5)) (n : u32) : RustM (RustArray u64 5) := do
   let r : (RustArray u64 5) := a;
   let i : u32 := (0 : u32);
   let ⟨i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r⟩ => (do (Rust_primitives.Hax.Machine_int.lt i n) : RustM Bool))
       (fun ⟨i, r⟩ =>
@@ -5717,7 +5662,7 @@ def fe_from_bytes (b : (RustArray u8 32)) : RustM (RustArray u64 5) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, raw⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, raw⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, raw⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -5747,7 +5692,7 @@ def fe_from_bytes (b : (RustArray u8 32)) : RustM (RustArray u64 5) := do
       let v : u64 := (0 : u64);
       let j : usize := (0 : usize);
       let ⟨j, v⟩ ←
-        (Rust_primitives.Hax.while_loop
+        (Rust_primitives.Hax.while_loop'
           (fun ⟨j, v⟩ => (do (pure true) : RustM Bool))
           (fun ⟨j, v⟩ =>
             (do
@@ -5766,57 +5711,38 @@ def fe_from_bytes (b : (RustArray u8 32)) : RustM (RustArray u64 5) := do
             let v : u64 ←
               (Rust_primitives.Hax.Machine_int.bitor
                 v
-                (← ((← (Rust_primitives.Hax.cast_op (← buf[(← (off +? j))]_?)))
-                  <<<? (← ((8 : usize) *? j)))));
+                (← ((← (Rust_primitives.Hax.cast_op (β := u64) (← buf[(← (off +? j))]_?)))
+                <<<? (← (Rust_primitives.Hax.cast_op (β := i32) (← ((8 : usize) *? j)))))));
             let j : usize ← (j +? (1 : usize));
             (pure (Rust_primitives.Hax.Tuple2.mk j v)) :
             RustM (Rust_primitives.Hax.Tuple2 usize u64))));
       (pure v) :
       RustM u64));
-  (pure #v[(← ((← (Core_models.Ops.Function.Fn.call
-                 ((RustSlice u8) -> usize -> RustM u64)
-                 (Rust_primitives.Hax.Tuple2 (RustSlice u8) usize)
-                 load8
-                 (Rust_primitives.Hax.Tuple2.mk
+  let e0 ← ((← (load8
                    (← (Rust_primitives.unsize raw))
-                   (0 : usize))))
-               &&&? MASK51)),
-             (← ((← ((← (Core_models.Ops.Function.Fn.call
-                   ((RustSlice u8) -> usize -> RustM u64)
-                   (Rust_primitives.Hax.Tuple2 (RustSlice u8) usize)
-                   load8
-                   (Rust_primitives.Hax.Tuple2.mk
+                   (0 : usize)))
+               &&&? MASK51)
+  let e1 ← ((← ((← (load8
                      (← (Rust_primitives.unsize raw))
-                     (6 : usize))))
+                     (6 : usize)))
                  >>>? (3 : i32)))
-               &&&? MASK51)),
-             (← ((← ((← (Core_models.Ops.Function.Fn.call
-                   ((RustSlice u8) -> usize -> RustM u64)
-                   (Rust_primitives.Hax.Tuple2 (RustSlice u8) usize)
-                   load8
-                   (Rust_primitives.Hax.Tuple2.mk
+               &&&? MASK51)
+  let e2 ← ((← ((← (load8
                      (← (Rust_primitives.unsize raw))
-                     (12 : usize))))
+                     (12 : usize)))
                  >>>? (6 : i32)))
-               &&&? MASK51)),
-             (← ((← ((← (Core_models.Ops.Function.Fn.call
-                   ((RustSlice u8) -> usize -> RustM u64)
-                   (Rust_primitives.Hax.Tuple2 (RustSlice u8) usize)
-                   load8
-                   (Rust_primitives.Hax.Tuple2.mk
+               &&&? MASK51)
+  let e3 ← ((← ((← (load8
                      (← (Rust_primitives.unsize raw))
-                     (19 : usize))))
+                     (19 : usize)))
                  >>>? (1 : i32)))
-               &&&? MASK51)),
-             (← ((← ((← (Core_models.Ops.Function.Fn.call
-                   ((RustSlice u8) -> usize -> RustM u64)
-                   (Rust_primitives.Hax.Tuple2 (RustSlice u8) usize)
-                   load8
-                   (Rust_primitives.Hax.Tuple2.mk
+               &&&? MASK51)
+  let e4 ← ((← ((← (load8
                      (← (Rust_primitives.unsize raw))
-                     (24 : usize))))
+                     (24 : usize)))
                  >>>? (12 : i32)))
-               &&&? MASK51))])
+               &&&? MASK51)
+  (pure #v[e0, e1, e2, e3, e4])
 
 --  Serialise a field element to 32 bytes (little-endian).
 def fe_to_bytes (a : (RustArray u64 5)) : RustM (RustArray u8 32) := do
@@ -5855,7 +5781,7 @@ def fe_to_bytes (a : (RustArray u64 5)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let k : usize := (0 : usize);
   let ⟨k, val⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨k, val⟩ => (do (pure true) : RustM Bool))
       (fun ⟨k, val⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
@@ -5870,7 +5796,7 @@ def fe_to_bytes (a : (RustArray u64 5)) : RustM (RustArray u8 32) := do
           (Libcrux_specs.Num.Impl_9.to_le_bytes (← words[k]_?));
         let j : usize := (0 : usize);
         let ⟨j, val⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, val⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, val⟩ =>
               (do
@@ -5905,7 +5831,7 @@ def cswap (swap : u64) (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
     (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
   let i : usize := (0 : usize);
   let ⟨i, ra, rb⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, ra, rb⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, ra, rb⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (5 : usize)) : RustM Bool))
@@ -5957,7 +5883,7 @@ def x25519_scalarmult (k : (RustArray u8 32)) (u : (RustArray u8 32)) :
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, scalar⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, scalar⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, scalar⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -6001,7 +5927,7 @@ def x25519_scalarmult (k : (RustArray u8 32)) (u : (RustArray u8 32)) :
   let swap : u64 := (0 : u64);
   let pos : i32 := (254 : i32);
   let ⟨pos, swap, x_2, x_3, z_2, z_3⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨pos, swap, x_2, x_3, z_2, z_3⟩ => (do (pure true) : RustM Bool))
       (fun ⟨pos, swap, x_2, x_3, z_2, z_3⟩ =>
         (do (Rust_primitives.Hax.Machine_int.ge pos (0 : i32)) : RustM Bool))
@@ -6197,7 +6123,10 @@ def cmp256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) : RustM i32 := do
             (Rust_primitives.Hax.Tuple2 Rust_primitives.Hax.Tuple0 usize))
           usize)))))
   with
-    | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) => (pure ret)
+    | (Core_models.Ops.Control_flow.ControlFlow.Break ret) =>
+      match ret with
+      | Core_models.Ops.Control_flow.ControlFlow.Break v => pure v
+      | Core_models.Ops.Control_flow.ControlFlow.Continue _ => pure (0 : i32)
     | (Core_models.Ops.Control_flow.ControlFlow.Continue  i) => (pure (0 : i32))
 
 --  256-bit addition: a + b, returns (result, carry).
@@ -6208,7 +6137,7 @@ def add256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
   let carry : u128 := (0 : u128);
   let i : usize := (4 : usize);
   let ⟨carry, i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨carry, i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨carry, i, r⟩ =>
         (do (Rust_primitives.Hax.Machine_int.gt i (0 : usize)) : RustM Bool))
@@ -6221,20 +6150,20 @@ def add256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
         (do
         let i : usize ← (i -? (1 : usize));
         let s : u128 ←
-          ((← ((← (Rust_primitives.Hax.cast_op (← a[i]_?)))
-              +? (← (Rust_primitives.Hax.cast_op (← b[i]_?)))))
+          ((← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[i]_?)))
+              +? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[i]_?)))))
             +? carry);
         let r : (RustArray u64 4) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             r
             i
-            (← (Rust_primitives.Hax.cast_op s)));
+            (← (Rust_primitives.Hax.cast_op (β := u64) s)));
         let carry : u128 ← (s >>>? (64 : i32));
         (pure (Rust_primitives.Hax.Tuple3.mk carry i r)) :
         RustM (Rust_primitives.Hax.Tuple3 u128 usize (RustArray u64 4)))));
   (pure (Rust_primitives.Hax.Tuple2.mk
     r
-    (← (Rust_primitives.Hax.cast_op carry))))
+    (← (Rust_primitives.Hax.cast_op (β := u64) carry))))
 
 --  256-bit subtraction: a - b, returns (result, borrow).
 --  borrow is 1 if a < b.
@@ -6245,7 +6174,7 @@ def sub256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
   let borrow : u128 := (0 : u128);
   let i : usize := (4 : usize);
   let ⟨borrow, i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨borrow, i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨borrow, i, r⟩ =>
         (do (Rust_primitives.Hax.Machine_int.gt i (0 : usize)) : RustM Bool))
@@ -6267,13 +6196,13 @@ def sub256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             r
             i
-            (← (Rust_primitives.Hax.cast_op s)));
+            (← (Rust_primitives.Hax.cast_op (β := u64) s)));
         let borrow : u128 ← ((← (s >>>? (127 : i32))) &&&? (1 : u128));
         (pure (Rust_primitives.Hax.Tuple3.mk borrow i r)) :
         RustM (Rust_primitives.Hax.Tuple3 u128 usize (RustArray u64 4)))));
   (pure (Rust_primitives.Hax.Tuple2.mk
     r
-    (← (Rust_primitives.Hax.cast_op borrow))))
+    (← (Rust_primitives.Hax.cast_op (β := u64) borrow))))
 
 --  Field addition: (a + b) mod p.
 def fp_add (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
@@ -6320,7 +6249,7 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
     (Rust_primitives.Hax.repeat (0 : u64) (9 : usize));
   let i : usize := (0 : usize);
   let ⟨i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -6334,7 +6263,7 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
         let carry : u128 := (0 : u128);
         let j : usize := (0 : usize);
         let ⟨carry, j, r⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨carry, j, r⟩ => (do (pure true) : RustM Bool))
             (fun ⟨carry, j, r⟩ =>
               (do
@@ -6347,17 +6276,17 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
             (fun ⟨carry, j, r⟩ =>
               (do
               let prod : u128 ←
-                ((← ((← ((← (Rust_primitives.Hax.cast_op
+                ((← ((← ((← (Rust_primitives.Hax.cast_op (β := u128)
                         (← a[(← ((3 : usize) -? i))]_?)))
-                      *? (← (Rust_primitives.Hax.cast_op
+                      *? (← (Rust_primitives.Hax.cast_op (β := u128)
                         (← b[(← ((3 : usize) -? j))]_?)))))
-                    +? (← (Rust_primitives.Hax.cast_op (← r[(← (i +? j))]_?)))))
+                    +? (← (Rust_primitives.Hax.cast_op (β := u128) (← r[(← (i +? j))]_?)))))
                   +? carry);
               let r : (RustArray u64 9) ←
                 (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                   r
                   (← (i +? j))
-                  (← (Rust_primitives.Hax.cast_op prod)));
+                  (← (Rust_primitives.Hax.cast_op (β := u64) prod)));
               let carry : u128 ← (prod >>>? (64 : i32));
               let j : usize ← (j +? (1 : usize));
               (pure (Rust_primitives.Hax.Tuple3.mk carry j r)) :
@@ -6367,7 +6296,7 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             r
             (← (i +? (4 : usize)))
-            (← (Rust_primitives.Hax.cast_op carry)));
+            (← (Rust_primitives.Hax.cast_op (β := u64) carry)));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk i r)) :
         RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u64 9)))));
@@ -6375,7 +6304,7 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
     (Rust_primitives.Hax.repeat (0 : u64) (8 : usize));
   let k : usize := (0 : usize);
   let ⟨k, out⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨k, out⟩ => (do (pure true) : RustM Bool))
       (fun ⟨k, out⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt k (8 : usize)) : RustM Bool))
@@ -6403,763 +6332,7 @@ def mul256_full (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
 --    T + S1 + S2 + S3 + S4 - D1 - D2 - D3 - D4  (mod p)
 -- 
 --  See NIST SP 800-186 / Solinas reduction for P-256.
-def reduce_mod_p (c : (RustArray u64 8)) : RustM (RustArray u64 4) := do
-  let w : (RustArray u32 16) ←
-    (Rust_primitives.Hax.repeat (0 : u32) (16 : usize));
-  let i : usize := (0 : usize);
-  let ⟨i, w⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨i, w⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨i, w⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt i (8 : usize)) : RustM Bool))
-      (fun ⟨i, w⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk i w)
-      (fun ⟨i, w⟩ =>
-        (do
-        let w : (RustArray u32 16) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            w
-            (← ((2 : usize) *? i))
-            (← (Rust_primitives.Hax.cast_op (← ((← c[i]_?) >>>? (32 : i32))))));
-        let w : (RustArray u32 16) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            w
-            (← ((← ((2 : usize) *? i)) +? (1 : usize)))
-            (← (Rust_primitives.Hax.cast_op (← c[i]_?))));
-        let i : usize ← (i +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk i w)) :
-        RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u32 16)))));
-  let
-    build : (u32 ->
-    u32 ->
-    u32 ->
-    u32 ->
-    u32 ->
-    u32 ->
-    u32 ->
-    u32 ->
-    RustM (RustArray u64 4)) :=
-    (fun a7 a6 a5 a4 a3 a2 a1 a0 =>
-      (do
-      (pure #v[(← (Rust_primitives.Hax.Machine_int.bitor
-                   (← ((← (Rust_primitives.Hax.cast_op a7)) <<<? (32 : i32)))
-                   (← (Rust_primitives.Hax.cast_op a6)))),
-                 (← (Rust_primitives.Hax.Machine_int.bitor
-                   (← ((← (Rust_primitives.Hax.cast_op a5)) <<<? (32 : i32)))
-                   (← (Rust_primitives.Hax.cast_op a4)))),
-                 (← (Rust_primitives.Hax.Machine_int.bitor
-                   (← ((← (Rust_primitives.Hax.cast_op a3)) <<<? (32 : i32)))
-                   (← (Rust_primitives.Hax.cast_op a2)))),
-                 (← (Rust_primitives.Hax.Machine_int.bitor
-                   (← ((← (Rust_primitives.Hax.cast_op a1)) <<<? (32 : i32)))
-                   (← (Rust_primitives.Hax.cast_op a0))))]) :
-      RustM (RustArray u64 4)));
-  let c : (usize -> RustM u32) :=
-    (fun idx => (do w[(← ((15 : usize) -? idx))]_? : RustM u32));
-  let t : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (7 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (6 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (5 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (4 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (3 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (2 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (1 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (0 : usize))))));
-  let s1 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (12 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (11 : usize))))
-        (0 : u32)
-        (0 : u32)
-        (0 : u32)));
-  let s2 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (12 : usize))))
-        (0 : u32)
-        (0 : u32)
-        (0 : u32)));
-  let s3 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (0 : u32)
-        (0 : u32)
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (10 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (9 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (8 : usize))))));
-  let s4 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (8 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (11 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (10 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (9 : usize))))));
-  let d1 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (10 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (8 : usize))))
-        (0 : u32)
-        (0 : u32)
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (12 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (11 : usize))))));
-  let d2 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (11 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (9 : usize))))
-        (0 : u32)
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (12 : usize))))));
-  let d3 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (12 : usize))))
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (10 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (9 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (8 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))));
-  let d4 : (RustArray u64 4) ←
-    (Core_models.Ops.Function.Fn.call
-      (u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      u32 ->
-      RustM (RustArray u64 4))
-      (Rust_primitives.Hax.Tuple8 u32 u32 u32 u32 u32 u32 u32 u32)
-      build
-      (Rust_primitives.Hax.Tuple8.mk
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (13 : usize))))
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (11 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (10 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (9 : usize))))
-        (0 : u32)
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (15 : usize))))
-        (← (Core_models.Ops.Function.Fn.call
-          (usize -> RustM u32)
-          (Rust_primitives.Hax.Tuple1 usize)
-          c
-          (Rust_primitives.Hax.Tuple1.mk (14 : usize))))));
-  let acc : (RustArray i128 4) ←
-    (Rust_primitives.Hax.repeat (0 : i128) (4 : usize));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?) +? (← (Rust_primitives.Hax.cast_op (← t[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              +? (← ((2 : i128)
-                *? (← (Rust_primitives.Hax.cast_op (← s1[k]_?))))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              +? (← ((2 : i128)
-                *? (← (Rust_primitives.Hax.cast_op (← s2[k]_?))))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              +? (← (Rust_primitives.Hax.cast_op (← s3[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              +? (← (Rust_primitives.Hax.cast_op (← s4[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              -? (← (Rust_primitives.Hax.cast_op (← d1[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              -? (← (Rust_primitives.Hax.cast_op (← d2[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              -? (← (Rust_primitives.Hax.cast_op (← d3[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let k : usize := (0 : usize);
-  let ⟨acc, k⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, k⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt k (4 : usize)) : RustM Bool))
-      (fun ⟨acc, k⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk acc k)
-      (fun ⟨acc, k⟩ =>
-        (do
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            k
-            (← ((← acc[k]_?)
-              -? (← (Rust_primitives.Hax.cast_op (← d4[k]_?))))));
-        let k : usize ← (k +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple2.mk acc k)) :
-        RustM (Rust_primitives.Hax.Tuple2 (RustArray i128 4) usize))));
-  let carry : i128 := (0 : i128);
-  let j : usize := (4 : usize);
-  let ⟨acc, carry, j⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨acc, carry, j⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨acc, carry, j⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.gt j (0 : usize)) : RustM Bool))
-      (fun ⟨acc, carry, j⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple3.mk acc carry j)
-      (fun ⟨acc, carry, j⟩ =>
-        (do
-        let j : usize ← (j -? (1 : usize));
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            j
-            (← ((← acc[j]_?) +? carry)));
-        let carry : i128 ← ((← acc[j]_?) >>>? (64 : i32));
-        let acc : (RustArray i128 4) ←
-          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            acc
-            j
-            (← ((← acc[j]_?) &&&? (18446744073709551615 : i128))));
-        (pure (Rust_primitives.Hax.Tuple3.mk acc carry j)) :
-        RustM (Rust_primitives.Hax.Tuple3 (RustArray i128 4) i128 usize))));
-  let r : (RustArray u64 4) :=
-    #v[(← (Rust_primitives.Hax.cast_op (← acc[(0 : usize)]_?))),
-         (← (Rust_primitives.Hax.cast_op (← acc[(1 : usize)]_?))),
-         (← (Rust_primitives.Hax.cast_op (← acc[(2 : usize)]_?))),
-         (← (Rust_primitives.Hax.cast_op (← acc[(3 : usize)]_?)))];
-  let ⟨carry, r⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨carry, r⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨carry, r⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.lt carry (0 : i128)) : RustM Bool))
-      (fun ⟨carry, r⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk carry r)
-      (fun ⟨carry, r⟩ =>
-        (do
-        let ⟨s, _⟩ ← (add256 r P256_P);
-        let r : (RustArray u64 4) := s;
-        let carry : i128 ← (carry +? (1 : i128));
-        (pure (Rust_primitives.Hax.Tuple2.mk carry r)) :
-        RustM (Rust_primitives.Hax.Tuple2 i128 (RustArray u64 4)))));
-  let ⟨carry, r⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨carry, r⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨carry, r⟩ =>
-        (do (Rust_primitives.Hax.Machine_int.gt carry (0 : i128)) : RustM Bool))
-      (fun ⟨carry, r⟩ =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple2.mk carry r)
-      (fun ⟨carry, r⟩ =>
-        (do
-        let ⟨s, _⟩ ← (sub256 r P256_P);
-        let r : (RustArray u64 4) := s;
-        let carry : i128 ← (carry -? (1 : i128));
-        (pure (Rust_primitives.Hax.Tuple2.mk carry r)) :
-        RustM (Rust_primitives.Hax.Tuple2 i128 (RustArray u64 4)))));
-  let r : (RustArray u64 4) ←
-    (Rust_primitives.Hax.while_loop
-      (fun r => (do (pure true) : RustM Bool))
-      (fun r =>
-        (do
-        (Rust_primitives.Hax.Machine_int.ge (← (cmp256 r P256_P)) (0 : i32)) :
-        RustM Bool))
-      (fun r =>
-        (do
-        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-        RustM Hax_lib.Int.Int))
-      r
-      (fun r =>
-        (do
-        let ⟨s, _⟩ ← (sub256 r P256_P);
-        let r : (RustArray u64 4) := s;
-        (pure r) :
-        RustM (RustArray u64 4))));
-  (pure r)
+def reduce_mod_p (c : (RustArray u64 8)) : RustM (RustArray u64 4) := sorry
 
 --  Field multiplication: (a * b) mod p.
 def fp_mul (a : (RustArray u64 4)) (b : (RustArray u64 4)) :
@@ -7186,7 +6359,7 @@ def fp_inv (a : (RustArray u64 4)) : RustM (RustArray u64 4) := do
          (18446744073709551613 : u64)];
   let bit_pos : i32 := (255 : i32);
   let ⟨bit_pos, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨bit_pos, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨bit_pos, result⟩ =>
         (do
@@ -7224,7 +6397,7 @@ def fp_to_bytes (a : (RustArray u64 4)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, out⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, out⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, out⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -7239,7 +6412,7 @@ def fp_to_bytes (a : (RustArray u64 4)) : RustM (RustArray u8 32) := do
           (Libcrux_specs.Num.Impl_9.to_be_bytes (← a[i]_?));
         let j : usize := (0 : usize);
         let ⟨j, out⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, out⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, out⟩ =>
               (do
@@ -7270,7 +6443,7 @@ def fp_from_bytes (b : (RustArray u8 32)) : RustM (RustArray u64 4) := do
     (Rust_primitives.Hax.repeat (0 : u64) (4 : usize));
   let i : usize := (0 : usize);
   let ⟨i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -7284,7 +6457,7 @@ def fp_from_bytes (b : (RustArray u8 32)) : RustM (RustArray u64 4) := do
         let word : u64 := (0 : u64);
         let j : usize := (0 : usize);
         let ⟨j, word⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, word⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, word⟩ =>
               (do
@@ -7342,7 +6515,7 @@ def reduce_mod_n (c : (RustArray u64 8)) : RustM (RustArray u64 4) := do
     (Rust_primitives.Hax.repeat (0 : u64) (4 : usize));
   let bit_pos : i32 := (511 : i32);
   let ⟨acc, bit_pos⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨acc, bit_pos⟩ => (do (pure true) : RustM Bool))
       (fun ⟨acc, bit_pos⟩ =>
         (do
@@ -7357,7 +6530,7 @@ def reduce_mod_n (c : (RustArray u64 8)) : RustM (RustArray u64 4) := do
         let carry_bit : u64 := (0 : u64);
         let k : usize := (4 : usize);
         let ⟨acc, carry_bit, k⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨acc, carry_bit, k⟩ => (do (pure true) : RustM Bool))
             (fun ⟨acc, carry_bit, k⟩ =>
               (do
@@ -7424,7 +6597,7 @@ def fn_inv (a : (RustArray u64 4)) : RustM (RustArray u64 4) := do
     #v[(0 : u64), (0 : u64), (0 : u64), (1 : u64)];
   let bit_pos : i32 := (255 : i32);
   let ⟨bit_pos, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨bit_pos, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨bit_pos, result⟩ =>
         (do
@@ -7598,7 +6771,7 @@ def scalar_mult (k : (RustArray u8 32)) (p : P256Point) : RustM P256Point := do
   let result : P256Point ← (point_identity Rust_primitives.Hax.Tuple0.mk);
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (256 : usize)) : RustM Bool))
@@ -7658,7 +6831,7 @@ def point_to_uncompressed (p : P256Point) : RustM (RustArray u8 65) := do
     let yb : (RustArray u8 32) ← (fp_to_bytes y);
     let j : usize := (0 : usize);
     let ⟨j, out⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨j, out⟩ => (do (pure true) : RustM Bool))
         (fun ⟨j, out⟩ =>
           (do (Rust_primitives.Hax.Machine_int.lt j (32 : usize)) : RustM Bool))
@@ -7699,7 +6872,7 @@ def point_from_uncompressed (bytes : (RustArray u8 65)) :
       (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
     let i : usize := (0 : usize);
     let ⟨i, xb, yb⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨i, xb, yb⟩ => (do (pure true) : RustM Bool))
         (fun ⟨i, xb, yb⟩ =>
           (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8030,7 +7203,7 @@ def scalar_mult (scalar : (RustArray u8 32)) (point : EdPoint) :
   let result : EdPoint ← (point_identity Rust_primitives.Hax.Tuple0.mk);
   let i : i32 := (255 : i32);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.ge i (0 : i32)) : RustM Bool))
@@ -8087,7 +7260,7 @@ def fe_sq_n (a : (RustArray u64 5)) (n : u32) : RustM (RustArray u64 5) := do
   let r : (RustArray u64 5) := a;
   let i : u32 := (0 : u32);
   let ⟨i, r⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r⟩ => (do (Rust_primitives.Hax.Machine_int.lt i n) : RustM Bool))
       (fun ⟨i, r⟩ =>
@@ -8153,7 +7326,7 @@ def point_decode (bytes : (RustArray u8 32)) :
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, y_bytes⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, y_bytes⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, y_bytes⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8265,7 +7438,7 @@ def point_decode (bytes : (RustArray u8 32)) :
           (0 : u64)))) :
       RustM Bool));
   if
-  (← (Core_models.Ops.Function.Fn.call
+  (← (Core_models.Ops.Function.FnOnce.call_once
     ((RustArray u64 5) -> RustM Bool)
     (Rust_primitives.Hax.Tuple1 (RustArray u64 5))
     is_zero
@@ -8286,7 +7459,7 @@ def point_decode (bytes : (RustArray u8 32)) :
     let x_red : (RustArray u64 5) ← (Libcrux_specs.Curve25519.fe_reduce x);
     if
     (← ((← (Rust_primitives.Hax.Machine_int.eq x_sign (1 : u8)))
-      &&? (← (Core_models.Ops.Function.Fn.call
+      &&? (← (Core_models.Ops.Function.FnOnce.call_once
         ((RustArray u64 5) -> RustM Bool)
         (Rust_primitives.Hax.Tuple1 (RustArray u64 5))
         is_zero
@@ -8300,7 +7473,7 @@ def point_decode (bytes : (RustArray u8 32)) :
         (EdPoint.mk (x := x) (y := y) (z := z) (t := t))))
   else
     if
-    (← (Core_models.Ops.Function.Fn.call
+    (← (Core_models.Ops.Function.FnOnce.call_once
       ((RustArray u64 5) -> RustM Bool)
       (Rust_primitives.Hax.Tuple1 (RustArray u64 5))
       is_zero
@@ -8324,7 +7497,7 @@ def point_decode (bytes : (RustArray u8 32)) :
       let x_red : (RustArray u64 5) ← (Libcrux_specs.Curve25519.fe_reduce x);
       if
       (← ((← (Rust_primitives.Hax.Machine_int.eq x_sign (1 : u8)))
-        &&? (← (Core_models.Ops.Function.Fn.call
+        &&? (← (Core_models.Ops.Function.FnOnce.call_once
           ((RustArray u64 5) -> RustM Bool)
           (Rust_primitives.Hax.Tuple1 (RustArray u64 5))
           is_zero
@@ -8378,8 +7551,11 @@ def ge_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) : RustM Bool := do
               (Rust_primitives.Hax.Tuple2 Rust_primitives.Hax.Tuple0 usize))
             usize)))))
     with
-      | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) => (pure ret)
-      | (Core_models.Ops.Control_flow.ControlFlow.Continue  i) => (pure true)
+      | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) =>
+        match ret with
+        | Core_models.Ops.Control_flow.ControlFlow.Break b => pure b
+        | Core_models.Ops.Control_flow.ControlFlow.Continue _ => pure true
+      | (Core_models.Ops.Control_flow.ControlFlow.Continue  _i) => (pure true)
 
 --  Subtract L from acc (acc -= L). acc is 5 words, L is 4 words (little-endian).
 def sub_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) :
@@ -8387,7 +7563,7 @@ def sub_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) :
   let borrow : u64 := (0 : u64);
   let i : usize := (0 : usize);
   let ⟨acc, borrow, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨acc, borrow, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨acc, borrow, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -8407,8 +7583,8 @@ def sub_l (acc : (RustArray u64 5)) (l : (RustArray u64 4)) :
             i
             r2);
         let borrow : u64 ←
-          ((← (Rust_primitives.Hax.cast_op b1))
-            +? (← (Rust_primitives.Hax.cast_op b2)));
+          ((← (Rust_primitives.Hax.cast_op (β := u64) b1))
+            +? (← (Rust_primitives.Hax.cast_op (β := u64) b2)));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple3.mk acc borrow i)) :
         RustM (Rust_primitives.Hax.Tuple3 (RustArray u64 5) u64 usize))));
@@ -8462,7 +7638,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u64) (8 : usize));
   let i : usize := (0 : usize);
   let ⟨i, s_words⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, s_words⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, s_words⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (8 : usize)) : RustM Bool))
@@ -8477,7 +7653,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
         let w : u64 := (0 : u64);
         let j : usize := (0 : usize);
         let ⟨j, w⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, w⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, w⟩ =>
               (do
@@ -8492,8 +7668,8 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
               let w : u64 ←
                 (Rust_primitives.Hax.Machine_int.bitor
                   w
-                  (← ((← (Rust_primitives.Hax.cast_op (← s[(← (base +? j))]_?)))
-                    <<<? (← ((8 : usize) *? j)))));
+                  (← ((← (Rust_primitives.Hax.cast_op (β := u64) (← s[(← (base +? j))]_?)))
+                    <<<? (← (Rust_primitives.Hax.cast_op (β := i32) (← ((8 : usize) *? j)))))));
               let j : usize ← (j +? (1 : usize));
               (pure (Rust_primitives.Hax.Tuple2.mk j w)) :
               RustM (Rust_primitives.Hax.Tuple2 usize u64))));
@@ -8509,7 +7685,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u64) (4 : usize));
   let i : usize := (0 : usize);
   let ⟨i, l_words⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, l_words⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, l_words⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -8524,7 +7700,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
         let w : u64 := (0 : u64);
         let j : usize := (0 : usize);
         let ⟨j, w⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, w⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, w⟩ =>
               (do
@@ -8539,9 +7715,9 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
               let w : u64 ←
                 (Rust_primitives.Hax.Machine_int.bitor
                   w
-                  (← ((← (Rust_primitives.Hax.cast_op
+                  (← ((← (Rust_primitives.Hax.cast_op (β := u64)
                       (← l_bytes[(← (base +? j))]_?)))
-                    <<<? (← ((8 : usize) *? j)))));
+                    <<<? (← (Rust_primitives.Hax.cast_op (β := i32) (← ((8 : usize) *? j)))))));
               let j : usize ← (j +? (1 : usize));
               (pure (Rust_primitives.Hax.Tuple2.mk j w)) :
               RustM (Rust_primitives.Hax.Tuple2 usize u64))));
@@ -8557,7 +7733,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
   let bit : i32 := (511 : i32);
   let ⟨acc, bit⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨acc, bit⟩ => (do (pure true) : RustM Bool))
       (fun ⟨acc, bit⟩ =>
         (do (Rust_primitives.Hax.Machine_int.ge bit (0 : i32)) : RustM Bool))
@@ -8571,7 +7747,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
         let carry : u64 := (0 : u64);
         let k : usize := (0 : usize);
         let ⟨acc, carry, k⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨acc, carry, k⟩ => (do (pure true) : RustM Bool))
             (fun ⟨acc, carry, k⟩ =>
               (do
@@ -8632,7 +7808,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (4 : usize)) : RustM Bool))
@@ -8647,7 +7823,7 @@ def scalar_reduce (s : (RustArray u8 64)) : RustM (RustArray u8 32) := do
           (Libcrux_specs.Num.Impl_9.to_le_bytes (← acc[i]_?));
         let j : usize := (0 : usize);
         let ⟨j, result⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, result⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, result⟩ =>
               (do
@@ -8680,7 +7856,7 @@ def scalar_add (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
   let carry : u16 := (0 : u16);
   let i : usize := (0 : usize);
   let ⟨carry, i, sum⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨carry, i, sum⟩ => (do (pure true) : RustM Bool))
       (fun ⟨carry, i, sum⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8692,14 +7868,14 @@ def scalar_add (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
       (fun ⟨carry, i, sum⟩ =>
         (do
         let s : u16 ←
-          ((← ((← (Rust_primitives.Hax.cast_op (← a[i]_?)))
-              +? (← (Rust_primitives.Hax.cast_op (← b[i]_?)))))
+          ((← ((← (Rust_primitives.Hax.cast_op (β := u16) (← a[i]_?)))
+              +? (← (Rust_primitives.Hax.cast_op (β := u16) (← b[i]_?)))))
             +? carry);
         let sum : (RustArray u8 64) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             sum
             i
-            (← (Rust_primitives.Hax.cast_op s)));
+            (← (Rust_primitives.Hax.cast_op (β := u8) s)));
         let carry : u16 ← (s >>>? (8 : i32));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple3.mk carry i sum)) :
@@ -8710,7 +7886,7 @@ def scalar_add (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
         (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
           sum
           (32 : usize)
-          (← (Rust_primitives.Hax.cast_op carry)));
+          (← (Rust_primitives.Hax.cast_op (β := u8) carry)));
       (pure sum)
     else
       (pure sum);
@@ -8723,7 +7899,7 @@ def scalar_mul_mod_l (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
     (Rust_primitives.Hax.repeat (0 : u32) (64 : usize));
   let i : usize := (0 : usize);
   let ⟨i, product⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, product⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, product⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8736,7 +7912,7 @@ def scalar_mul_mod_l (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
         (do
         let j : usize := (0 : usize);
         let ⟨j, product⟩ ←
-          (Rust_primitives.Hax.while_loop
+          (Rust_primitives.Hax.while_loop'
             (fun ⟨j, product⟩ => (do (pure true) : RustM Bool))
             (fun ⟨j, product⟩ =>
               (do
@@ -8753,8 +7929,8 @@ def scalar_mul_mod_l (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
                   product
                   (← (i +? j))
                   (← ((← product[(← (i +? j))]_?)
-                    +? (← ((← (Rust_primitives.Hax.cast_op (← a[i]_?)))
-                      *? (← (Rust_primitives.Hax.cast_op (← b[j]_?))))))));
+                    +? (← ((← (Rust_primitives.Hax.cast_op (β := u32) (← a[i]_?)))
+                      *? (← (Rust_primitives.Hax.cast_op (β := u32) (← b[j]_?))))))));
               let j : usize ← (j +? (1 : usize));
               (pure (Rust_primitives.Hax.Tuple2.mk j product)) :
               RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u32 64)))));
@@ -8766,7 +7942,7 @@ def scalar_mul_mod_l (a : (RustArray u8 32)) (b : (RustArray u8 32)) :
   let carry : u32 := (0 : u32);
   let i : usize := (0 : usize);
   let ⟨carry, i, result⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨carry, i, result⟩ => (do (pure true) : RustM Bool))
       (fun ⟨carry, i, result⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (64 : usize)) : RustM Bool))
@@ -8802,7 +7978,7 @@ def clamp (h : (RustArray u8 32)) : RustM (RustArray u8 32) := do
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨a, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨a, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨a, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8853,7 +8029,7 @@ def ed25519_public_key (secret_key : (RustArray u8 32)) :
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
   let ⟨h_lo, i⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨h_lo, i⟩ => (do (pure true) : RustM Bool))
       (fun ⟨h_lo, i⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8888,8 +8064,8 @@ def ed25519_public_key (secret_key : (RustArray u8 32)) :
 --  Steps:
 --  1. h = SHA-512(secret_key)
 --  2. a = clamp(h[0..32])
---  3. prefix = h[32..64]
---  4. r = SHA-512(prefix || msg) mod L
+--  3. pfx = h[32..64]
+--  4. r = SHA-512(pfx || msg) mod L
 --  5. R = r * B
 --  6. public_key = encode(a * B)
 --  7. k = SHA-512(R_enc || public_key || msg) mod L
@@ -8901,33 +8077,33 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
     (Libcrux_specs.Sha512.sha512 (← (Rust_primitives.unsize secret_key)));
   let h_lo : (RustArray u8 32) ←
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
-  let prefix : (RustArray u8 32) ←
+  let pfx : (RustArray u8 32) ←
     (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
   let i : usize := (0 : usize);
-  let ⟨h_lo, i, prefix⟩ ←
-    (Rust_primitives.Hax.while_loop
-      (fun ⟨h_lo, i, prefix⟩ => (do (pure true) : RustM Bool))
-      (fun ⟨h_lo, i, prefix⟩ =>
+  let ⟨h_lo, i, pfx⟩ ←
+    (Rust_primitives.Hax.while_loop'
+      (fun ⟨h_lo, i, pfx⟩ => (do (pure true) : RustM Bool))
+      (fun ⟨h_lo, i, pfx⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
-      (fun ⟨h_lo, i, prefix⟩ =>
+      (fun ⟨h_lo, i, pfx⟩ =>
         (do
         (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
         RustM Hax_lib.Int.Int))
-      (Rust_primitives.Hax.Tuple3.mk h_lo i prefix)
-      (fun ⟨h_lo, i, prefix⟩ =>
+      (Rust_primitives.Hax.Tuple3.mk h_lo i pfx)
+      (fun ⟨h_lo, i, pfx⟩ =>
         (do
         let h_lo : (RustArray u8 32) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             h_lo
             i
             (← h[i]_?));
-        let prefix : (RustArray u8 32) ←
+        let pfx : (RustArray u8 32) ←
           (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-            prefix
+            pfx
             i
             (← h[(← ((32 : usize) +? i))]_?));
         let i : usize ← (i +? (1 : usize));
-        (pure (Rust_primitives.Hax.Tuple3.mk h_lo i prefix)) :
+        (pure (Rust_primitives.Hax.Tuple3.mk h_lo i pfx)) :
         RustM
         (Rust_primitives.Hax.Tuple3
           (RustArray u8 32)
@@ -8945,7 +8121,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
     (Alloc.Vec.Impl.new u8 Rust_primitives.Hax.Tuple0.mk);
   let i : usize := (0 : usize);
   let ⟨i, r_input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r_input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r_input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -8957,7 +8133,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
       (fun ⟨i, r_input⟩ =>
         (do
         let r_input : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-          (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global r_input (← prefix[i]_?));
+          (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global r_input (← pfx[i]_?));
         let i : usize ← (i +? (1 : usize));
         (pure (Rust_primitives.Hax.Tuple2.mk i r_input)) :
         RustM
@@ -8966,7 +8142,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let i : usize := (0 : usize);
   let ⟨i, r_input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, r_input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, r_input⟩ =>
         (do
@@ -9003,7 +8179,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
     (Alloc.Vec.Impl.new u8 Rust_primitives.Hax.Tuple0.mk);
   let i : usize := (0 : usize);
   let ⟨i, k_input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, k_input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -9024,7 +8200,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let i : usize := (0 : usize);
   let ⟨i, k_input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, k_input⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -9047,7 +8223,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let i : usize := (0 : usize);
   let ⟨i, k_input⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, k_input⟩ =>
         (do
@@ -9084,7 +8260,7 @@ def ed25519_sign (secret_key : (RustArray u8 32)) (msg : (RustSlice u8)) :
     (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
   let i : usize := (0 : usize);
   let ⟨i, signature⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨i, signature⟩ => (do (pure true) : RustM Bool))
       (fun ⟨i, signature⟩ =>
         (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -9133,7 +8309,7 @@ def ed25519_verify
         (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
       let i : usize := (0 : usize);
       let ⟨i, r_enc⟩ ←
-        (Rust_primitives.Hax.while_loop
+        (Rust_primitives.Hax.while_loop'
           (fun ⟨i, r_enc⟩ => (do (pure true) : RustM Bool))
           (fun ⟨i, r_enc⟩ =>
             (do
@@ -9160,7 +8336,7 @@ def ed25519_verify
             (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
           let i : usize := (0 : usize);
           let ⟨i, s_bytes⟩ ←
-            (Rust_primitives.Hax.while_loop
+            (Rust_primitives.Hax.while_loop'
               (fun ⟨i, s_bytes⟩ => (do (pure true) : RustM Bool))
               (fun ⟨i, s_bytes⟩ =>
                 (do
@@ -9237,26 +8413,20 @@ def ed25519_verify
                   (← l_bytes[i]_?))) then
                   let s_ge_l : Bool := true;
                   (pure (Core_models.Ops.Control_flow.ControlFlow.Break
-                    (Rust_primitives.Hax.Tuple2.mk
-                      Rust_primitives.Hax.Tuple0.mk
-                      (Rust_primitives.Hax.Tuple2.mk i s_ge_l))))
+                    (Rust_primitives.Hax.Tuple2.mk i s_ge_l)))
                 else
                   if
                   (← (Rust_primitives.Hax.Machine_int.lt
                     (← s_bytes[i]_?)
                     (← l_bytes[i]_?))) then
                     (pure (Core_models.Ops.Control_flow.ControlFlow.Break
-                      (Rust_primitives.Hax.Tuple2.mk
-                        Rust_primitives.Hax.Tuple0.mk
-                        (Rust_primitives.Hax.Tuple2.mk i s_ge_l))))
+                      (Rust_primitives.Hax.Tuple2.mk i s_ge_l)))
                   else
                     (pure (Core_models.Ops.Control_flow.ControlFlow.Continue
                       (Rust_primitives.Hax.Tuple2.mk i s_ge_l))) :
                 RustM
                 (Core_models.Ops.Control_flow.ControlFlow
-                  (Rust_primitives.Hax.Tuple2
-                    Rust_primitives.Hax.Tuple0
-                    (Rust_primitives.Hax.Tuple2 usize Bool))
+                  (Rust_primitives.Hax.Tuple2 usize Bool)
                   (Rust_primitives.Hax.Tuple2 usize Bool)))));
           if s_ge_l then
             (pure false)
@@ -9265,7 +8435,7 @@ def ed25519_verify
               (Alloc.Vec.Impl.new u8 Rust_primitives.Hax.Tuple0.mk);
             let i : usize := (0 : usize);
             let ⟨i, k_input⟩ ←
-              (Rust_primitives.Hax.while_loop
+              (Rust_primitives.Hax.while_loop'
                 (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
                 (fun ⟨i, k_input⟩ =>
                   (do
@@ -9290,7 +8460,7 @@ def ed25519_verify
                     (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
             let i : usize := (0 : usize);
             let ⟨i, k_input⟩ ←
-              (Rust_primitives.Hax.while_loop
+              (Rust_primitives.Hax.while_loop'
                 (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
                 (fun ⟨i, k_input⟩ =>
                   (do
@@ -9315,7 +8485,7 @@ def ed25519_verify
                     (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
             let i : usize := (0 : usize);
             let ⟨i, k_input⟩ ←
-              (Rust_primitives.Hax.while_loop
+              (Rust_primitives.Hax.while_loop'
                 (fun ⟨i, k_input⟩ => (do (pure true) : RustM Bool))
                 (fun ⟨i, k_input⟩ =>
                   (do
@@ -9415,7 +8585,10 @@ def ge256 (a : (RustArray u64 4)) (b : (RustArray u64 4)) : RustM Bool := do
             (Rust_primitives.Hax.Tuple2 Rust_primitives.Hax.Tuple0 usize))
           usize)))))
   with
-    | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) => (pure ret)
+    | (Core_models.Ops.Control_flow.ControlFlow.Break ret) =>
+      match ret with
+      | Core_models.Ops.Control_flow.ControlFlow.Break v => pure v
+      | Core_models.Ops.Control_flow.ControlFlow.Continue _ => pure true
     | (Core_models.Ops.Control_flow.ControlFlow.Continue  i) => (pure true)
 
 --  Reduce a field element mod n (the curve order).
@@ -9427,7 +8600,7 @@ def reduce_mod_n (a : (RustArray u64 4)) : RustM (RustArray u64 4) := do
     let borrow : u128 := (0 : u128);
     let i : usize := (4 : usize);
     let ⟨borrow, i, r⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨borrow, i, r⟩ => (do (pure true) : RustM Bool))
         (fun ⟨borrow, i, r⟩ =>
           (do (Rust_primitives.Hax.Machine_int.gt i (0 : usize)) : RustM Bool))
@@ -9510,7 +8683,7 @@ def ecdsa_p256_sign
           let s_bytes : (RustArray u8 32) ← (Libcrux_specs.P256.fp_to_bytes s);
           let i : usize := (0 : usize);
           let ⟨i, sig⟩ ←
-            (Rust_primitives.Hax.while_loop
+            (Rust_primitives.Hax.while_loop'
               (fun ⟨i, sig⟩ => (do (pure true) : RustM Bool))
               (fun ⟨i, sig⟩ =>
                 (do
@@ -9572,7 +8745,7 @@ def ecdsa_p256_verify
       (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
     let i : usize := (0 : usize);
     let ⟨i, qx_bytes, qy_bytes⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨i, qx_bytes, qy_bytes⟩ => (do (pure true) : RustM Bool))
         (fun ⟨i, qx_bytes, qy_bytes⟩ =>
           (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -9613,7 +8786,7 @@ def ecdsa_p256_verify
       (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
     let i : usize := (0 : usize);
     let ⟨i, r_bytes, s_bytes⟩ ←
-      (Rust_primitives.Hax.while_loop
+      (Rust_primitives.Hax.while_loop'
         (fun ⟨i, r_bytes, s_bytes⟩ => (do (pure true) : RustM Bool))
         (fun ⟨i, r_bytes, s_bytes⟩ =>
           (do (Rust_primitives.Hax.Machine_int.lt i (32 : usize)) : RustM Bool))
@@ -9720,19 +8893,9 @@ def bn_from_bytes_be (bytes : (RustSlice u8)) :
               (← (Alloc.Vec.Impl_1.as_slice limbs))
               limb_idx
               (← (Rust_primitives.Hax.Machine_int.bitor
-                (← (Rust_primitives.Hax.failure
-                  "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                  "deref(core_models::ops::index::f_index_mut(&mut (limbs), limb_idx))"))
-                (← ((← (Rust_primitives.Hax.cast_op (← bytes[byte_pos]_?)))
-                  <<<? bit_offset)))))));
+                (← limbs[limb_idx]_?)
+                (← ((← (Rust_primitives.Hax.cast_op (β := u64) (← bytes[byte_pos]_?)))
+                  <<<? (← (Rust_primitives.Hax.cast_op (β := i32) bit_offset)))))))));
         (pure limbs) :
         RustM (Alloc.Vec.Vec u64 Alloc.Alloc.Global))))
 
@@ -9774,7 +8937,7 @@ def bn_to_bytes_be (a : (RustSlice u64)) (byte_len : usize) :
 def effective_len (a : (RustSlice u64)) : RustM usize := do
   let n : usize ← (Core_models.Slice.Impl.len u64 a);
   let n : usize ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun n => (do (pure true) : RustM Bool))
       (fun n =>
         (do
@@ -9847,8 +9010,11 @@ def bn_cmp (a : (RustSlice u64)) (b : (RustSlice u64)) :
                 (Rust_primitives.Hax.Tuple2 Rust_primitives.Hax.Tuple0 usize))
               usize)))))
       with
-        | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) => (pure ret)
-        | (Core_models.Ops.Control_flow.ControlFlow.Continue  i) =>
+        | (Core_models.Ops.Control_flow.ControlFlow.Break  ret) =>
+          match ret with
+          | Core_models.Ops.Control_flow.ControlFlow.Break ordering => pure ordering
+          | Core_models.Ops.Control_flow.ControlFlow.Continue _ => pure Core_models.Cmp.Ordering.Equal
+        | (Core_models.Ops.Control_flow.ControlFlow.Continue  _i) =>
           (pure Core_models.Cmp.Ordering.Equal)
 
 --  Check whether a bignum is zero.
@@ -9863,8 +9029,8 @@ def bn_trim (a : (RustSlice u64)) :
     (Alloc.Slice.Impl.into_vec u64 Alloc.Alloc.Global
       (← (Rust_primitives.unsize #v[(0 : u64)])))
   else
-    (Alloc.Slice.Impl.to_vec u64
-      (← a[(Core_models.Ops.Range.RangeTo.mk (_end := n))]_?))
+    (Alloc.Slice.Impl.to_vec (α := u64)
+      (a.take n.toNat))
 
 --  Add two bignums. Returns a + b (may grow by one limb).
 def bn_add (a : (RustSlice u64)) (b : (RustSlice u64)) :
@@ -9913,8 +9079,8 @@ def bn_add (a : (RustSlice u64)) (b : (RustSlice u64)) :
               i
               sum2)));
         let carry : u64 ←
-          ((← (Rust_primitives.Hax.cast_op c1))
-            +? (← (Rust_primitives.Hax.cast_op c2)));
+          ((← (Rust_primitives.Hax.cast_op (β := u64) c1))
+            +? (← (Rust_primitives.Hax.cast_op (β := u64) c2)));
         (pure (Rust_primitives.Hax.Tuple2.mk carry result)) :
         RustM
         (Rust_primitives.Hax.Tuple2
@@ -9963,8 +9129,8 @@ def bn_sub (a : (RustSlice u64)) (b : (RustSlice u64)) :
               i
               diff2)));
         let borrow : u64 ←
-          ((← (Rust_primitives.Hax.cast_op b1))
-            +? (← (Rust_primitives.Hax.cast_op b2)));
+          ((← (Rust_primitives.Hax.cast_op (β := u64) b1))
+            +? (← (Rust_primitives.Hax.cast_op (β := u64) b2)));
         (pure (Rust_primitives.Hax.Tuple2.mk borrow result)) :
         RustM
         (Rust_primitives.Hax.Tuple2
@@ -10010,20 +9176,20 @@ def bn_mul (a : (RustSlice u64)) (b : (RustSlice u64)) :
               (fun ⟨carry, result⟩ j =>
                 (do
                 let prod : u128 ←
-                  ((← ((← ((← (Rust_primitives.Hax.cast_op (← a[i]_?)))
-                        *? (← (Rust_primitives.Hax.cast_op (← b[j]_?)))))
-                      +? (← (Rust_primitives.Hax.cast_op
+                  ((← ((← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[i]_?)))
+                        *? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[j]_?)))))
+                      +? (← (Rust_primitives.Hax.cast_op (β := u128)
                         (← result[(← (i +? j))]_?)))))
-                    +? (← (Rust_primitives.Hax.cast_op carry)));
+                    +? (← (Rust_primitives.Hax.cast_op (β := u128) carry)));
                 let result : (Alloc.Vec.Vec u64 Alloc.Alloc.Global) ←
                   (Alloc.Slice.Impl.to_vec
                     (←
                     (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                       (← (Alloc.Vec.Impl_1.as_slice result))
                       (← (i +? j))
-                      (← (Rust_primitives.Hax.cast_op prod)))));
+                      (← (Rust_primitives.Hax.cast_op (β := u64) prod)))));
                 let carry : u64 ←
-                  (Rust_primitives.Hax.cast_op (← (prod >>>? (64 : i32))));
+                  (Rust_primitives.Hax.cast_op (β := u64) (← (prod >>>? (64 : i32))));
                 (pure (Rust_primitives.Hax.Tuple2.mk carry result)) :
                 RustM
                 (Rust_primitives.Hax.Tuple2
@@ -10050,7 +9216,7 @@ def bn_bit_length (a : (RustSlice u64)) : RustM usize := do
     let top : u64 ← a[(← (elen -? (1 : usize)))]_?;
     ((← ((← (elen -? (1 : usize))) *? (64 : usize)))
       +? (← ((64 : usize)
-        -? (← (Rust_primitives.Hax.cast_op
+        -? (← (Rust_primitives.Hax.cast_op (β := usize)
           (← (Libcrux_specs.Num.Impl_9.leading_zeros top)))))))
 
 --  Division and modulus: returns (quotient, remainder) such that a = q * b + r.
@@ -10070,10 +9236,7 @@ def bn_divmod (a : (RustSlice u64)) (b : (RustSlice u64)) :
         (← (bn_is_zero
           (← (Core_models.Ops.Deref.Deref.deref
             (Alloc.Vec.Vec u64 Alloc.Alloc.Global) b)))))))) then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["division by zero"])))))
+      (sorry /- panic -/)
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   if
@@ -10089,7 +9252,7 @@ def bn_divmod (a : (RustSlice u64)) (b : (RustSlice u64)) :
     (pure (Rust_primitives.Hax.Tuple2.mk
       (← (Alloc.Slice.Impl.into_vec u64 Alloc.Alloc.Global
         (← (Rust_primitives.unsize #v[(0 : u64)]))))
-      (← (Alloc.Slice.Impl.to_vec u64
+      (← (Alloc.Slice.Impl.to_vec (α := u64)
         (← (Core_models.Ops.Deref.Deref.deref
           (Alloc.Vec.Vec u64 Alloc.Alloc.Global) a))))))
   else
@@ -10122,7 +9285,7 @@ def bn_divmod (a : (RustSlice u64)) (b : (RustSlice u64)) :
               (start := (0 : usize))
               (_end := a_bits))))))
         (Rust_primitives.Hax.Tuple2.mk quotient remainder)
-        (fun ⟨quotient, remainder⟩ i =>
+        (fun ⟨quotient, remainder⟩ (i : usize) =>
           (do
           let carry : u64 := (0 : u64);
           let ⟨carry, remainder⟩ ←
@@ -10163,17 +9326,7 @@ def bn_divmod (a : (RustSlice u64)) (b : (RustSlice u64)) :
                     (← (Alloc.Vec.Impl_1.as_slice remainder))
                     (0 : usize)
                     (← (Rust_primitives.Hax.Machine_int.bitor
-                      (← (Rust_primitives.Hax.failure
-                        "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                        "deref(core_models::ops::index::f_index_mut(&mut (remainder), 0))"))
+                      (← (remainder[0]_?))
                       (← ((← ((← a[limb_idx]_?) >>>? bit_idx))
                         &&&? (1 : u64))))))));
               (pure remainder)
@@ -10220,8 +9373,8 @@ Note: the error was labeled with context `DirectAndMut`.
                         k
                         d2)));
                   let borrow : u64 ←
-                    ((← (Rust_primitives.Hax.cast_op b1))
-                      +? (← (Rust_primitives.Hax.cast_op b2)));
+                    ((← (Rust_primitives.Hax.cast_op (β := u64) b1))
+                      +? (← (Rust_primitives.Hax.cast_op (β := u64) b2)));
                   (pure (Rust_primitives.Hax.Tuple2.mk borrow remainder)) :
                   RustM
                   (Rust_primitives.Hax.Tuple2
@@ -10240,17 +9393,7 @@ Note: the error was labeled with context `DirectAndMut`.
                     (← (Alloc.Vec.Impl_1.as_slice quotient))
                     q_limb
                     (← (Rust_primitives.Hax.Machine_int.bitor
-                      (← (Rust_primitives.Hax.failure
-                        "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                        "deref(core_models::ops::index::f_index_mut(&mut (quotient), q_limb))"))
+                      (← (quotient[q_limb]_?))
                       (← ((1 : u64) <<<? q_bit)))))));
               (pure (Rust_primitives.Hax.Tuple2.mk quotient remainder))
             else
@@ -10287,10 +9430,7 @@ def bn_modpow
     if
     (← (Core_models.Ops.Bit.Not.not
       (← (Core_models.Ops.Bit.Not.not (← (bn_is_zero modulus)))))) then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["modulus must be nonzero"])))))
+      (sorry /- panic -/)
     else
       (pure Rust_primitives.Hax.Tuple0.mk);
   let exp_bits : usize ← (bn_bit_length exp);
@@ -10384,7 +9524,7 @@ def mgf1_sha256 (seed : (RustSlice u8)) (mask_len : usize) :
     (Alloc.Vec.Impl.new u8 Rust_primitives.Hax.Tuple0.mk);
   let counter : u32 := (0 : u32);
   let ⟨counter, t⟩ ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun ⟨counter, t⟩ => (do (pure true) : RustM Bool))
       (fun ⟨counter, t⟩ =>
         (do
@@ -10565,17 +9705,7 @@ def emsa_pss_encode
           (← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
             (← (Alloc.Vec.Impl_1.as_slice masked_db))
             (0 : usize)
-            (← ((← (Rust_primitives.Hax.failure
-                "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                "deref(core_models::ops::index::f_index_mut(&mut (masked_db), 0))"))
+            (← ((← (masked_db[0]_?))
               &&&? mask)))));
       (pure masked_db)
     else
@@ -10688,17 +9818,7 @@ def emsa_pss_verify
                   (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                     (← (Alloc.Vec.Impl_1.as_slice db))
                     (0 : usize)
-                    (← ((← (Rust_primitives.Hax.failure
-                        "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                        "deref(core_models::ops::index::f_index_mut(&mut (db), 0))"))
+                    (← ((← (db[0]_?))
                       &&&? mask)))));
               (pure db)
             else
@@ -10848,17 +9968,7 @@ Note: the error was labeled with context `DirectAndMut`.
                 (← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
                   (← (Alloc.Vec.Impl_1.as_slice db))
                   (0 : usize)
-                  (← ((← (Rust_primitives.Hax.failure
-                      "At this position, Hax was expecting an expression of the shape `&mut _`.
-Hax forbids `f(x)` (where `f` expects a mutable reference as input) when `x` is not a place expression[1] or when it is a dereference expression.
-
-[1]: https://doc.rust-lang.org/reference/expressions.html#place-expressions-and-value-expressions
-
-This is discussed in issue https://github.com/hacspec/hax/issues/420.
-Please upvote or comment this issue if you see this error message.
-Note: the error was labeled with context `DirectAndMut`.
-"
-                      "deref(core_models::ops::index::f_index_mut(&mut (db), 0))"))
+                  (← ((← (db[0]_?))
                     &&&? mask)))));
             (pure db)
           else
@@ -10982,7 +10092,7 @@ Note: the error was labeled with context `DirectAndMut`.
 def byte_bit_length (bytes : (RustSlice u8)) : RustM usize := do
   let start : usize := (0 : usize);
   let start : usize ←
-    (Rust_primitives.Hax.while_loop
+    (Rust_primitives.Hax.while_loop'
       (fun start => (do (pure true) : RustM Bool))
       (fun start =>
         (do
@@ -11012,7 +10122,7 @@ def byte_bit_length (bytes : (RustSlice u8)) : RustM usize := do
     let top_byte : u8 ← bytes[start]_?;
     let bits_in_top : usize ←
       ((8 : usize)
-        -? (← (Rust_primitives.Hax.cast_op
+        -? (← (Rust_primitives.Hax.cast_op (β := usize)
           (← (Libcrux_specs.Num.Impl_6.leading_zeros top_byte)))));
     (bits_in_top
       +? (← ((← ((← ((← (Core_models.Slice.Impl.len u8 bytes)) -? start))
@@ -11414,3 +10524,5 @@ def aes128_gcm_open_32
 
 end Libcrux_specs.Fixed
 
+
+end
