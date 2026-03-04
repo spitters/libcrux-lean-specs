@@ -33,3 +33,7 @@ pub mod rsa_pss;
 
 // Fixed-length wrappers for SSProve bridge
 pub mod fixed;
+
+// Kani bounded model checking proofs (only compiled with cargo kani)
+#[cfg(kani)]
+pub mod kani_proofs;

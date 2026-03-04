@@ -1,0 +1,14 @@
+[engine]
+
+[engine.options]
+# Extract the fixed-length wrappers (SSProve-facing API) and their transitive dependencies
+include = [
+  "libcrux_specs::fixed::*",
+  "libcrux_specs::sha256::*",
+  "libcrux_specs::hmac::*",
+  "libcrux_specs::hkdf::*",
+  "libcrux_specs::aes::*",
+  "libcrux_specs::gf128::*",
+  "libcrux_specs::aes_gcm::*",
+  "libcrux_specs::curve25519::*",
+]
