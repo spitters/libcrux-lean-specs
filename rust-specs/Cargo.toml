@@ -25,7 +25,7 @@ libcrux-blake2 = "0.0.6"
 libcrux-chacha20poly1305 = "0.0.6"
 libcrux-ed25519 = "0.0.6"
 libcrux-ecdsa = "0.0.6"
-libcrux-poly1305 = "0.0.4"
+libcrux-poly1305 = "0.0.5"
 # RustCrypto AES for block-level testing (libcrux doesn't expose raw block)
 aes = "0.8"
 # Google's Project Wycheproof test vectors
