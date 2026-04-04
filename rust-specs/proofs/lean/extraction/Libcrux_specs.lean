@@ -5033,19 +5033,12 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
 def aes_gcm_encrypt_generic
     (impl_Fn([u8;_16])_-__[u8;_16] : Type)
     [trait_constr_aes_gcm_encrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
+      Core_models.Ops.Function.FnOnce.AssociatedTypes
       impl_Fn([u8;_16])_-__[u8;_16]
       (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     [trait_constr_aes_gcm_encrypt_generic_i0 : Core_models.Ops.Function.Fn
       impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
+      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
@@ -5213,19 +5206,12 @@ def aes_gcm_encrypt_generic
 def aes_gcm_decrypt_generic
     (impl_Fn([u8;_16])_-__[u8;_16] : Type)
     [trait_constr_aes_gcm_decrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
+      Core_models.Ops.Function.FnOnce.AssociatedTypes
       impl_Fn([u8;_16])_-__[u8;_16]
       (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     [trait_constr_aes_gcm_decrypt_generic_i0 : Core_models.Ops.Function.Fn
       impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
+      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
