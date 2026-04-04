@@ -323,7 +323,7 @@ checksum = "c627fca7f9cb4cedaa9667670de8f591859dd2417ce4006c4f0ebbe5626f5e0a"
 dependencies = [
  "libcrux-hacl-rs",
  "libcrux-macros",
- "libcrux-poly1305",
+ "libcrux-poly1305 0.0.4",
  "libcrux-secrets",
  "libcrux-traits",
 ]
@@ -446,6 +446,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libcrux-poly1305"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02491808ee5b9db8cb65fad64ae0be812db64beef179d945c00c7787dc7dfcf9"
+dependencies = [
+ "libcrux-hacl-rs",
+ "libcrux-macros",
+]
+
+[[package]]
 name = "libcrux-secrets"
 version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -480,7 +490,7 @@ dependencies = [
  "libcrux-hkdf",
  "libcrux-hmac",
  "libcrux-p256",
- "libcrux-poly1305",
+ "libcrux-poly1305 0.0.5",
  "libcrux-sha2",
  "proptest",
  "serde",
