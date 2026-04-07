@@ -114,10 +114,43 @@ theorem hkdf_expand_32_isOk (prk info : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.hkdf_expand_32 prk info) := by
   sorry
 
-/-- AES-128 block encryption does not panic. -/
+/-- Helper: AES-128 key expansion always succeeds. (Proof TODO) -/
+theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
+    (Libcrux_specs.Aes.aes128_key_expand key).isOk = true := by
+  sorry  -- TODO: deep proof through 2 nested while_loops + many array ops
+
+/-- Helper: AES encryption rounds always succeed when given valid round_keys. (Proof TODO) -/
+theorem aes_encrypt_rounds_isOk (pt : Vector UInt8 16)
+    (round_keys : Array (Vector UInt8 16))
+    (h : 11 ≤ round_keys.size) :
+    (Libcrux_specs.Aes.aes_encrypt_rounds pt round_keys (10 : usize)).isOk = true := by
+  sorry  -- TODO: deep proof through while_loop' + sub_bytes/shift_rows/mix_columns/add_round_key
+
+open LibcruxSpecs.PanicFree in
+/-- AES-128 block encryption does not panic.
+    Compositional proof: depends on `aes128_key_expand_isOk` and
+    `aes_encrypt_rounds_isOk` (the leaf functions, both still TODO).
+
+    The `unsize` step preserves the size (11 round keys), which feeds into
+    `aes_encrypt_rounds_isOk`'s precondition `11 ≤ slice.size`. -/
 theorem aes128_encrypt_isOk (key pt : Vector UInt8 16) :
     RustM.IsOk (Libcrux_specs.Aes.aes128_encrypt key pt) := by
-  sorry
+  unfold RustM.IsOk Libcrux_specs.Aes.aes128_encrypt
+  -- Step 1: aes128_key_expand key
+  apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ (aes128_key_expand_isOk key)
+  intro round_keys _hke
+  -- Step 2: unsize round_keys; result has size 11 (preserves Vector size)
+  apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ (unsize_isOk round_keys)
+  intro slice hsl
+  -- After unsize: slice = round_keys.toArray, so slice.size = 11
+  -- Step 3: aes_encrypt_rounds pt slice 10
+  apply aes_encrypt_rounds_isOk
+  -- Goal: 11 ≤ slice.size
+  -- From hsl : Rust_primitives.unsize round_keys = .ok slice we get slice = round_keys.toArray
+  unfold Rust_primitives.unsize at hsl
+  simp at hsl
+  rw [← hsl]
+  simp [Vector.size_toArray]
 
 /-- AES-128-GCM seal on 32-byte buffers does not panic. -/
 theorem aes128_gcm_seal_32_isOk (key pt aad : Vector UInt8 32) :
@@ -129,15 +162,35 @@ theorem aes128_gcm_open_32_isOk (key ct aad : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.aes128_gcm_open_32 key ct aad) := by
   sorry
 
-/-- X25519 scalar multiplication does not panic. -/
-theorem x25519_scalarmult_isOk (k u : Vector UInt8 32) :
-    RustM.IsOk (Libcrux_specs.Fixed.x25519_scalarmult k u) := by
+/-- Helper: Curve25519 internal scalar mult always succeeds.
+    (Proof TODO — requires limb-bound invariants through Montgomery ladder.) -/
+theorem curve25519_x25519_scalarmult_isOk (k u : Vector UInt8 32) :
+    (Libcrux_specs.Curve25519.x25519_scalarmult k u).isOk = true := by
   sorry
 
-/-- X25519 base point multiplication does not panic. -/
+/-- X25519 scalar multiplication does not panic.
+    Trivial delegation to `Curve25519.x25519_scalarmult`. -/
+theorem x25519_scalarmult_isOk (k u : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.x25519_scalarmult k u) := by
+  unfold RustM.IsOk Libcrux_specs.Fixed.x25519_scalarmult
+  exact curve25519_x25519_scalarmult_isOk k u
+
+/-- X25519 base point multiplication does not panic.
+    Compositional proof: `repeat 0 32 → set[0]:=9 → scalarmult k base`.
+    Each step is shown to succeed using PanicFreeInfra lemmas. -/
 theorem x25519_base_isOk (k : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.x25519_base k) := by
-  sorry
+  unfold RustM.IsOk Libcrux_specs.Fixed.x25519_base Libcrux_specs.Curve25519.x25519_base
+  -- Step 1: repeat (0 : u8) (32 : usize) — succeeds because size matches
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact LibcruxSpecs.PanicFree.repeat_isOk _ _ rfl
+  intro base
+  -- Step 2: update_at_usize base 0 9 — succeeds because 0 < 32
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact LibcruxSpecs.PanicFree.update_at_usize_isOk _ _ _ (by decide)
+  intro base'
+  -- Step 3: scalarmult k base' — by helper lemma
+  exact curve25519_x25519_scalarmult_isOk k base'
 
 /-- P-256 scalar multiplication does not panic. -/
 theorem p256_scalar_mult_32_isOk (k p : Vector UInt8 32) :

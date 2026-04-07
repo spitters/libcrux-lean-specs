@@ -5,6 +5,7 @@ Authors: Bas Spitters
 -/
 
 import LibcruxSpecs.Specs
+import LibcruxSpecs.LoopCompat
 
 /-!
 # PanicFree Infrastructure
@@ -100,6 +101,11 @@ theorem vec_as_slice_isOk {T A : Type} (v : Alloc.Vec.Vec T A) :
 
 theorem vec_len_isOk (α A : Type) (v : Alloc.Vec.Vec α Alloc.Alloc.Global) :
     (Alloc.Vec.Impl_1.len α A v).isOk = true := rfl
+
+/-! ## Loops
+
+The `while_loop'_isOk` lemma is in `LoopCompat.lean` (where it has access
+to the private `while_loop_fuel`). `fold_range_isOk` is TODO. -/
 
 /-! ## Bind composition -/
 

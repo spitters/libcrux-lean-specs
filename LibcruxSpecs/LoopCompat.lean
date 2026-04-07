@@ -69,12 +69,32 @@ noncomputable def Rust_primitives.Hax.while_loop_cf {β : Type}
   loop 10000 init
 
 /-- Fuel-bounded while_loop. **Fuel = 100 000 iterations.** -/
-private def while_loop_fuel {β : Type}
+def while_loop_fuel {β : Type}
     (cond : β → RustM Bool) (body : β → RustM β) : Nat → β → RustM β
   | 0, state => pure state
   | n + 1, state => do
     if (← cond state) then while_loop_fuel cond body n (← body state)
     else pure state
+
+/-- If `cond` and `body` always succeed, so does `while_loop_fuel`. -/
+theorem while_loop_fuel_isOk {β : Type} (cond : β → RustM Bool) (body : β → RustM β)
+    (hcond : ∀ s, (cond s).isOk = true)
+    (hbody : ∀ s, (body s).isOk = true) :
+    ∀ (n : Nat) (init : β), (while_loop_fuel cond body n init).isOk = true := by
+  intro n
+  induction n with
+  | zero => intro init; rfl
+  | succ k ih =>
+    intro init
+    unfold while_loop_fuel
+    have hc := hcond init
+    match h_cond : cond init, hc with
+    | .ok true, _ =>
+      simp [h_cond, RustM.bind]
+      have hb := hbody init
+      match h_body : body init, hb with
+      | .ok v, _ => simp [h_body, RustM.bind]; exact ih v
+    | .ok false, _ => simp [h_cond, RustM.bind]
 
 def Rust_primitives.Hax.while_loop' {β : Type}
     (_inv : β → RustM Prop)
@@ -83,3 +103,12 @@ def Rust_primitives.Hax.while_loop' {β : Type}
     (init : β)
     (body : β → RustM β) : RustM β :=
   while_loop_fuel cond body 100000 init
+
+/-- `while_loop'` succeeds if both `cond` and `body` always succeed. -/
+theorem Rust_primitives.Hax.while_loop'_isOk {β : Type}
+    (inv : β → RustM Prop) (cond : β → RustM Bool)
+    (term : β → RustM Hax_lib.Int.Int) (init : β) (body : β → RustM β)
+    (hcond : ∀ s, (cond s).isOk = true)
+    (hbody : ∀ s, (body s).isOk = true) :
+    (Rust_primitives.Hax.while_loop' inv cond term init body).isOk = true :=
+  while_loop_fuel_isOk cond body hcond hbody 100000 init
