@@ -5,6 +5,7 @@ Authors: Bas Spitters
 -/
 
 import LibcruxSpecs.Specs
+import LibcruxSpecs.PanicFreeInfra
 
 /-!
 # Panic-Freedom Predicates for LibcruxSpecs

@@ -1,2 +1,3 @@
 import LibcruxSpecs.Specs
+import LibcruxSpecs.PanicFreeInfra
 import LibcruxSpecs.PanicFree
