@@ -154,15 +154,15 @@ pub fn blake2b(msg: &[u8], key: &[u8], out_len: usize) -> Vec<u8> {
     h[0] ^= 0x01010000 ^ ((key_len as u64) << 8) ^ (out_len as u64);
 
     // If keyed, the first block is the key padded to BLOCK_B bytes.
-    let mut data: Vec<u8>;
-    if key_len > 0 {
-        data = Vec::with_capacity(BLOCK_B + msg.len());
-        data.extend_from_slice(key);
-        data.resize(BLOCK_B, 0);
-        data.extend_from_slice(msg);
+    let mut data: Vec<u8> = if key_len > 0 {
+        let mut d = Vec::with_capacity(BLOCK_B + msg.len());
+        d.extend_from_slice(key);
+        d.resize(BLOCK_B, 0);
+        d.extend_from_slice(msg);
+        d
     } else {
-        data = msg.to_vec();
-    }
+        msg.to_vec()
+    };
 
     // If the data is empty (unkeyed, empty message), we still compress one block of zeros.
     if data.is_empty() {
@@ -329,15 +329,15 @@ pub fn blake2s(msg: &[u8], key: &[u8], out_len: usize) -> Vec<u8> {
     h[0] ^= 0x01010000 ^ ((key_len as u32) << 8) ^ (out_len as u32);
 
     // If keyed, the first block is the key padded to BLOCK_S bytes.
-    let mut data: Vec<u8>;
-    if key_len > 0 {
-        data = Vec::with_capacity(BLOCK_S + msg.len());
-        data.extend_from_slice(key);
-        data.resize(BLOCK_S, 0);
-        data.extend_from_slice(msg);
+    let mut data: Vec<u8> = if key_len > 0 {
+        let mut d = Vec::with_capacity(BLOCK_S + msg.len());
+        d.extend_from_slice(key);
+        d.resize(BLOCK_S, 0);
+        d.extend_from_slice(msg);
+        d
     } else {
-        data = msg.to_vec();
-    }
+        msg.to_vec()
+    };
 
     // If the data is empty (unkeyed, empty message), we still compress one block of zeros.
     if data.is_empty() {

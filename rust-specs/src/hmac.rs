@@ -24,9 +24,12 @@ pub const OPAD: u8 = 0x5c;
 /// 4. result = SHA-256((key_padded XOR opad) || inner)
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     // Step 1: If key > block size, hash it
-    let key_hash: [u8; 32];
+    let key_hash: [u8; 32] = if key.len() > BLOCK_SIZE {
+        sha256(key)
+    } else {
+        [0u8; 32]
+    };
     let key_bytes: &[u8] = if key.len() > BLOCK_SIZE {
-        key_hash = sha256(key);
         &key_hash
     } else {
         key

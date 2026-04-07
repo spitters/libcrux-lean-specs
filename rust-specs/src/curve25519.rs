@@ -29,9 +29,8 @@ pub fn fe_one() -> [u64; 5] {
 /// After this, each limb is at most 51 bits.
 pub fn fe_carry(a: [u64; 5]) -> [u64; 5] {
     let mut r = a;
-    let mut carry: u64;
 
-    carry = r[0] >> 51;
+    let mut carry: u64 = r[0] >> 51;
     r[0] &= MASK51;
     r[1] += carry;
 
@@ -116,10 +115,9 @@ pub fn fe_mul(a: [u64; 5], b: [u64; 5]) -> [u64; 5] {
 
     // Carry propagation through u128 intermediates.
     let mut out = [0u64; 5];
-    let mut carry: u128;
 
     out[0] = (r0 as u64) & MASK51;
-    carry = r0 >> 51;
+    let mut carry: u128 = r0 >> 51;
 
     let s1 = r1 + carry;
     out[1] = (s1 as u64) & MASK51;
@@ -294,12 +292,9 @@ fn fe_mul_121666(a: [u64; 5]) -> [u64; 5] {
     let c = A24 as u128;
     let mut r = [0u64; 5];
 
-    let mut t: u128;
-    let mut carry: u128;
-
-    t = (a[0] as u128) * c;
+    let mut t: u128 = (a[0] as u128) * c;
     r[0] = (t as u64) & MASK51;
-    carry = t >> 51;
+    let mut carry: u128 = t >> 51;
 
     t = (a[1] as u128) * c + carry;
     r[1] = (t as u64) & MASK51;
