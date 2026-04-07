@@ -73,6 +73,24 @@ end RustM
 
 namespace LibcruxSpecs.PanicFree
 
+/-! ## Infrastructure: RustM.bind composition for IsOk -/
+
+/-- If `x` succeeds and `f` succeeds on the result, then `x >>= f` succeeds. -/
+theorem RustM.bind_isOk {α β : Type} (x : RustM α) (f : α → RustM β)
+    (hx : x.isOk = true) (hf : ∀ a, x = .ok a → (f a).isOk = true) :
+    (x >>= f).isOk = true := by
+  match x, hx with
+  | .ok v, _ => exact hf v rfl
+
+/-- Variant: if `x` succeeds and `f` succeeds on ALL inputs, then `x >>= f` succeeds. -/
+theorem RustM.bind_isOk' {α β : Type} (x : RustM α) (f : α → RustM β)
+    (hx : x.isOk = true) (hf : ∀ a, (f a).isOk = true) :
+    (x >>= f).isOk = true :=
+  bind_isOk x f hx (fun a _ => hf a)
+
+/-- `pure v` always succeeds. -/
+@[simp] theorem RustM.pure_isOk {α : Type} (v : α) : (pure v : RustM α).isOk = true := rfl
+
 /-! ## Panic-freedom predicates -/
 
 /-- SHA-256 on 32-byte input does not panic. -/
