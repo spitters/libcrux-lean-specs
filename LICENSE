@@ -22,6 +22,6 @@ SOFTWARE.
 
 ---
 
-The `Hax/` directory contains code adapted from Cryspen's hax project
+The `HaxPrelude/` directory contains code adapted from Cryspen's hax project
 (https://github.com/hacspec/hax), licensed under the Apache License 2.0.
-See Hax/LICENSE for the full Apache 2.0 text.
+See HaxPrelude/LICENSE for the full Apache 2.0 text.

@@ -2,13 +2,14 @@ import Lake
 open Lake DSL
 
 package «libcrux-lean-specs» where
+  version := v!"0.0.1-alpha.1"
   leanOptions := #[
     ⟨`autoImplicit, false⟩
   ]
 
 -- Hax prelude library (Rust primitives, core models, tactics)
 @[default_target]
-lean_lib «Hax» where
+lean_lib «HaxPrelude» where
   srcDir := "."
 
 -- libcrux-specs: pure crypto function signatures

@@ -4,7 +4,7 @@ Pure Lean 4 specifications for [libcrux](https://github.com/cryspen/libcrux) cry
 
 ## Contents
 
-### Hax Prelude (`Hax/`)
+### Hax Prelude (`HaxPrelude/`)
 
 The Lean prelude for hax extraction, providing:
 
@@ -41,5 +41,5 @@ Requires Lean 4.28.0 (no other dependencies except Qq).
 ## License
 
 `LibcruxSpecs/` and `rust-specs/` are MIT licensed (Copyright Bas Spitters).
-`Hax/` is adapted from [Cryspen's hax](https://github.com/hacspec/hax) Lean backend
-and retains the Apache License 2.0 (see `Hax/LICENSE`).
+`HaxPrelude/` is adapted from [Cryspen's hax](https://github.com/hacspec/hax) Lean backend
+and retains the Apache License 2.0 (see `HaxPrelude/LICENSE`).

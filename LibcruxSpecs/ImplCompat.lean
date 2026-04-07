@@ -10,7 +10,7 @@ Extraction numbering (in `Libcrux_specs.Num` namespace):
 We provide concrete implementations for all methods the extraction references.
 -/
 
-import Hax
+import HaxPrelude
 
 set_option linter.unusedVariables false
 
