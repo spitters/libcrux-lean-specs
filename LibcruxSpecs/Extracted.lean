@@ -2,6 +2,9 @@
 -- Experimental lean backend for Hax
 -- The Hax prelude library can be found in hax/proof-libs/lean
 import HaxPrelude
+import LibcruxSpecs.NumCompat
+import LibcruxSpecs.LoopCompat
+import LibcruxSpecs.CastCompat
 import LibcruxSpecs.ImplCompat
 import Std.Tactic.Do
 import Std.Do.Triple
