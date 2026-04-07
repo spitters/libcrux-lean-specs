@@ -5634,10 +5634,53 @@ def fe_sub (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
 --  it wraps to limb (i-5) with a factor of 19.
 def fe_mul (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
     RustM (RustArray u64 5) := do
-  -- TODO: spliced from re-extraction but needs u128 typeclass compat work
-  -- The Rust source is fixed (no declare-first); re-extraction produces correct code
-  -- but the hax prelude lacks Add/Mul forwarding for nested AssociatedTypes.Output on u128
-  (Rust_primitives.Hax.failure "fe_mul: pending u128 typeclass compat (hax prelude gap)" "")
+  let b1_19 : u128 ← ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[(1 : usize)]_?))));
+  let b2_19 : u128 ← ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[(2 : usize)]_?))));
+  let b3_19 : u128 ← ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[(3 : usize)]_?))));
+  let b4_19 : u128 ← ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (β := u128) (← b[(4 : usize)]_?))));
+  let a0 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← a[(0 : usize)]_?));
+  let a1 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← a[(1 : usize)]_?));
+  let a2 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← a[(2 : usize)]_?));
+  let a3 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← a[(3 : usize)]_?));
+  let a4 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← a[(4 : usize)]_?));
+  let b0 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← b[(0 : usize)]_?));
+  let b1 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← b[(1 : usize)]_?));
+  let b2 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← b[(2 : usize)]_?));
+  let b3 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← b[(3 : usize)]_?));
+  let b4 : u128 ← (Rust_primitives.Hax.cast_op (β := u128) (← b[(4 : usize)]_?));
+  -- Schoolbook multiplication with type ascriptions to help resolution
+  let t0 : u128 ← (a0 *? b0); let t1 : u128 ← (a1 *? b4_19); let t2 : u128 ← (a2 *? b3_19); let t3 : u128 ← (a3 *? b2_19); let t4 : u128 ← (a4 *? b1_19);
+  let r0 : u128 ← ((← ((← ((← (t0 +? t1)) +? t2)) +? t3)) +? t4);
+  let t0 : u128 ← (a0 *? b1); let t1 : u128 ← (a1 *? b0); let t2 : u128 ← (a2 *? b4_19); let t3 : u128 ← (a3 *? b3_19); let t4 : u128 ← (a4 *? b2_19);
+  let r1 : u128 ← ((← ((← ((← (t0 +? t1)) +? t2)) +? t3)) +? t4);
+  let t0 : u128 ← (a0 *? b2); let t1 : u128 ← (a1 *? b1); let t2 : u128 ← (a2 *? b0); let t3 : u128 ← (a3 *? b4_19); let t4 : u128 ← (a4 *? b3_19);
+  let r2 : u128 ← ((← ((← ((← (t0 +? t1)) +? t2)) +? t3)) +? t4);
+  let t0 : u128 ← (a0 *? b3); let t1 : u128 ← (a1 *? b2); let t2 : u128 ← (a2 *? b1); let t3 : u128 ← (a3 *? b0); let t4 : u128 ← (a4 *? b4_19);
+  let r3 : u128 ← ((← ((← ((← (t0 +? t1)) +? t2)) +? t3)) +? t4);
+  let t0 : u128 ← (a0 *? b4); let t1 : u128 ← (a1 *? b3); let t2 : u128 ← (a2 *? b2); let t3 : u128 ← (a3 *? b1); let t4 : u128 ← (a4 *? b0);
+  let r4 : u128 ← ((← ((← ((← (t0 +? t1)) +? t2)) +? t3)) +? t4);
+  -- Carry propagation
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (0 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) r0)) &&&? MASK51)));
+  let carry : u128 ← (r0 >>>? (51 : i32));
+  let s1 : u128 ← (r1 +? carry);
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (1 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) s1)) &&&? MASK51)));
+  let carry : u128 ← (s1 >>>? (51 : i32));
+  let s2 : u128 ← (r2 +? carry);
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (2 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) s2)) &&&? MASK51)));
+  let carry : u128 ← (s2 >>>? (51 : i32));
+  let s3 : u128 ← (r3 +? carry);
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (3 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) s3)) &&&? MASK51)));
+  let carry : u128 ← (s3 >>>? (51 : i32));
+  let s4 : u128 ← (r4 +? carry);
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (4 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) s4)) &&&? MASK51)));
+  let carry : u128 ← (s4 >>>? (51 : i32));
+  let carry_u64 : u64 ← (Rust_primitives.Hax.cast_op carry);
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (0 : usize) (← ((← out[(0 : usize)]_?) +? (← (carry_u64 *? (19 : u64))))));
+  let c : u64 ← ((← out[(0 : usize)]_?) >>>? (51 : i32));
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (0 : usize) (← ((← out[(0 : usize)]_?) &&&? MASK51)));
+  let out : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize out (1 : usize) (← ((← out[(1 : usize)]_?) +? c)));
+  (pure out)
 
 --  Field squaring.
 def fe_sq (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do (fe_mul a a)
@@ -5980,8 +6023,33 @@ def cswap (swap : u64) (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
 
 --  Multiply a field element by the small constant 121666.
 def fe_mul_121666 (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do
-  -- TODO: spliced from re-extraction but needs u128 typeclass compat work (same as fe_mul)
-  (Rust_primitives.Hax.failure "fe_mul_121666: pending u128 typeclass compat (hax prelude gap)" "")
+  let c : u128 ← (Rust_primitives.Hax.cast_op A24);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
+  let t : u128 ← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[(0 : usize)]_?))) *? c);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (0 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) t)) &&&? MASK51)));
+  let carry : u128 ← (t >>>? (51 : i32));
+  let p1 : u128 ← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[(1 : usize)]_?))) *? c);
+  let t : u128 ← (p1 +? carry);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (1 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) t)) &&&? MASK51)));
+  let carry : u128 ← (t >>>? (51 : i32));
+  let p2 : u128 ← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[(2 : usize)]_?))) *? c);
+  let t : u128 ← (p2 +? carry);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (2 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) t)) &&&? MASK51)));
+  let carry : u128 ← (t >>>? (51 : i32));
+  let p3 : u128 ← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[(3 : usize)]_?))) *? c);
+  let t : u128 ← (p3 +? carry);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (3 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) t)) &&&? MASK51)));
+  let carry : u128 ← (t >>>? (51 : i32));
+  let p4 : u128 ← ((← (Rust_primitives.Hax.cast_op (β := u128) (← a[(4 : usize)]_?))) *? c);
+  let t : u128 ← (p4 +? carry);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (4 : usize) (← ((← (Rust_primitives.Hax.cast_op (β := u64) t)) &&&? MASK51)));
+  let carry : u128 ← (t >>>? (51 : i32));
+  let carry_u64 : u64 ← (Rust_primitives.Hax.cast_op carry);
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (0 : usize) (← ((← r[(0 : usize)]_?) +? (← (carry_u64 *? (19 : u64))))));
+  let c2 : u64 ← ((← r[(0 : usize)]_?) >>>? (51 : i32));
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (0 : usize) (← ((← r[(0 : usize)]_?) &&&? MASK51)));
+  let r : (RustArray u64 5) ← (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize r (1 : usize) (← ((← r[(1 : usize)]_?) +? c2)));
+  (pure r)
 
 --  X25519 scalar multiplication (RFC 7748).
 -- 
