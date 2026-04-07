@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 CatCrypt Contributors
+Copyright (c) 2026 Bas Spitters
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The `Hax/` directory contains code adapted from Cryspen's hax project
+(https://github.com/hacspec/hax), licensed under the Apache License 2.0.
+See Hax/LICENSE for the full Apache 2.0 text.

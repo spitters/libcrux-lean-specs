@@ -1,80 +1,145 @@
 /-
-Copyright (c) 2026 SSProve-Lean4 Contributors. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: SSProve-Lean4 Contributors
+Copyright (c) 2026 Bas Spitters. All rights reserved.
+Released under MIT license as described in the file LICENSE.
+Authors: Bas Spitters
 -/
+
+import LibcruxSpecs.Specs
 
 /-!
-# Panic-Freedom and Extraction Status
+# Panic-Freedom Predicates for LibcruxSpecs
 
-## Status
+This module defines `RustM.IsOk` predicates asserting that each extracted
+crypto function succeeds (returns `.ok`, not `.fail` or `.div`) on all inputs.
 
-The hax extraction pipeline successfully produces Lean definitions for all 18
-Rust spec modules (253 definitions total). However, the extracted Lean file
-requires Hax prelude updates for full compilation:
+## Design
 
-* Missing `Alloc.Vec.Impl_1.truncate` binding
-* Type class resolution failures for `OrOp` on `Shl.AssociatedTypes.Output`
-* Chacha20 (line 2755+) uses `i32` shift operations missing from prelude
-
-## Verified Properties (Level 1 + Level 2)
-
-These properties are verified by differential testing and Kani BMC, providing
-strong evidence that the `opaque` constants in `Specs.lean` faithfully model
-the Rust implementations:
-
-### Level 1: Differential Testing (proptest + Wycheproof)
-
-| Function | Test Method | Cases |
-|----------|-----------|-------|
-| `sha256_32` | proptest vs libcrux-sha2 | 500 random + NIST vector |
-| `hmac_sha256_32` | proptest vs libcrux-hmac | 500 random + RFC 4231 + 174 Wycheproof |
-| `hkdf_extract_32` | proptest vs libcrux-hkdf | 500 random + RFC 5869 + 86 Wycheproof |
-| `hkdf_expand_32` | proptest vs libcrux-hkdf | 500 random |
-| `aes128_encrypt` | proptest vs RustCrypto AES | 1000 random + NIST FIPS 197 + 67 Wycheproof |
-| `aes128_gcm_seal_32` | proptest vs libcrux-aesgcm | 200 random |
-| `x25519_scalarmult` | proptest vs libcrux-curve25519 | 200 random + 518 Wycheproof + RFC 7748 |
-| `x25519_base` | proptest vs libcrux-curve25519 | 200 random |
-| `chacha20_poly1305` | proptest vs libcrux | 200 random + 316 Wycheproof |
-
-### Level 2: Kani Bounded Model Checking (Exhaustive)
-
-| Property | Method | Status |
-|----------|--------|--------|
-| AES S-box is permutation | Kani (all 2^16 pairs) | VERIFIED |
-| GF(2^8) mul2 total | Kani (all 256 inputs) | VERIFIED |
-| GF(2^8) mul3 total | Kani (all 256 inputs) | VERIFIED |
-| GF(2^128) commutative | Kani (all 2^16 small pairs) | VERIFIED |
-| GF(2^128) mul zero | Kani (all 2^128) | VERIFIED |
-| AES-128 no panic | Kani (symbolic, unwind 65) | VERIFIED |
-| AES-128 deterministic | Kani (symbolic, unwind 65) | VERIFIED |
-| Poly1305 empty msg | Kani (all 2^256 keys) | VERIFIED |
-
-### Level 3: Hax Extraction
-
-| Component | Status |
-|-----------|--------|
-| Extraction to Lean | 253 definitions generated |
-| SHA-256, AES, HMAC, HKDF, X25519 | Definitions present |
-| P-256, Ed25519, ECDSA, RSA-PSS | Definitions present |
-| Fixed-length wrappers | Definitions present |
-| Lean compilation | Blocked on Hax prelude updates |
-
-## Correspondence Chain
+Each predicate is stated as a `Prop` of the form:
 
 ```
-Rust specs (pure)  ←──Level 1 (proptest)──→  libcrux (verified)
-       │
-       ├──Level 2 (Kani BMC)──→  exhaustive correctness
-       │
-       └──Level 3 (hax)──→  Lean definitions (pending prelude)
-                              │
-                              └──→  Specs.lean opaques (future)
+∀ (inputs), (Libcrux_specs.Fixed.f inputs).isOk = true
 ```
 
-When the Hax prelude is updated, the extracted Lean definitions will
-replace the `opaque` constants in `Specs.lean`, closing the gap entirely.
+These are currently `sorry`-ed: proving them requires showing that every
+array index, integer operation, and loop iteration in the extracted code
+is panic-free. The `native_panic_freedom` tactic (in `Hax.Tactic`) can
+close some of these goals automatically for simpler functions.
+
+## Why This Matters
+
+`LibcruxSpecs.Specs` uses `RustM.getD` to unwrap extracted results, falling
+back to a zero vector on failure. If a function actually panics, the spec
+silently returns garbage. These predicates, once proved, guarantee that
+the `getD` fallback is never reached, making the specs faithful.
+
+## Verification Status
+
+| Function | Rust proptest | Rust Kani | Lean `IsOk` |
+|----------|:---:|:---:|:---:|
+| `sha256_32` | 1000 | - | `sorry` |
+| `hmac_sha256_32` | 500 + Wycheproof | - | `sorry` |
+| `hkdf_extract_32` | 500 + Wycheproof | - | `sorry` |
+| `hkdf_expand_32` | 500 | - | `sorry` |
+| `aes128_encrypt` | 1000 + Wycheproof | VERIFIED | `sorry` |
+| `aes128_gcm_seal_32` | 200 | - | `sorry` |
+| `aes128_gcm_open_32` | 200 | - | `sorry` |
+| `x25519_scalarmult` | 200 + Wycheproof | - | `sorry` |
+| `x25519_base` | 200 | - | `sorry` |
+| `p256_scalar_mult_32` | - | - | `sorry` |
+| `p256_base_mult_32` | - | - | `sorry` |
 -/
 
--- This file documents the verification status.
--- No executable Lean code yet — pending Hax prelude compatibility.
+set_option autoImplicit false
+
+/-! ## Helper: `RustM.IsOk` as a `Prop` -/
+
+namespace RustM
+
+/-- `RustM.IsOk x` holds when `x = .ok v` for some `v`. -/
+def IsOk {α : Type} (x : RustM α) : Prop := x.isOk = true
+
+/-- Extract the value from an `IsOk` computation. -/
+noncomputable def getOk {α : Type} (x : RustM α) (h : IsOk x) : α :=
+  x.of_isOk h
+
+/-- When `IsOk` holds, `getD` returns the same value as `getOk`. -/
+theorem getD_eq_getOk {α : Type} (x : RustM α) (d : α) (h : IsOk x) :
+    x.getD d = x.getOk h := by
+  unfold IsOk at h
+  match x, h with
+  | .ok v, _ => rfl
+
+end RustM
+
+namespace LibcruxSpecs.PanicFree
+
+/-! ## Panic-freedom predicates -/
+
+/-- SHA-256 on 32-byte input does not panic. -/
+theorem sha256_32_isOk (msg : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.sha256_32 msg) := by
+  sorry
+
+/-- HMAC-SHA256 on 32-byte key and message does not panic. -/
+theorem hmac_sha256_32_isOk (key msg : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.hmac_sha256_32 key msg) := by
+  sorry
+
+/-- HKDF-Extract on 32-byte salt and IKM does not panic. -/
+theorem hkdf_extract_32_isOk (salt ikm : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.hkdf_extract_32 salt ikm) := by
+  sorry
+
+/-- HKDF-Expand on 32-byte PRK and info does not panic. -/
+theorem hkdf_expand_32_isOk (prk info : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.hkdf_expand_32 prk info) := by
+  sorry
+
+/-- AES-128 block encryption does not panic. -/
+theorem aes128_encrypt_isOk (key pt : Vector UInt8 16) :
+    RustM.IsOk (Libcrux_specs.Aes.aes128_encrypt key pt) := by
+  sorry
+
+/-- AES-128-GCM seal on 32-byte buffers does not panic. -/
+theorem aes128_gcm_seal_32_isOk (key pt aad : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.aes128_gcm_seal_32 key pt aad) := by
+  sorry
+
+/-- AES-128-GCM open on 32-byte buffers does not panic. -/
+theorem aes128_gcm_open_32_isOk (key ct aad : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.aes128_gcm_open_32 key ct aad) := by
+  sorry
+
+/-- X25519 scalar multiplication does not panic. -/
+theorem x25519_scalarmult_isOk (k u : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.x25519_scalarmult k u) := by
+  sorry
+
+/-- X25519 base point multiplication does not panic. -/
+theorem x25519_base_isOk (k : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.x25519_base k) := by
+  sorry
+
+/-- P-256 scalar multiplication does not panic. -/
+theorem p256_scalar_mult_32_isOk (k p : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.p256_scalar_mult_32 k p) := by
+  sorry
+
+/-- P-256 base point multiplication does not panic. -/
+theorem p256_base_mult_32_isOk (k : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.p256_base_mult_32 k) := by
+  sorry
+
+/-! ## Consequence: `getD` faithfulness
+
+Once the `_isOk` theorems above are proved, these corollaries show
+that `LibcruxSpecs.Specs` definitions are faithful (the zero-vector
+fallback is unreachable). -/
+
+/-- `LibcruxSpecs.sha256_32` equals the extracted result (no fallback). -/
+theorem sha256_32_faithful (msg : Vector UInt8 32) :
+    LibcruxSpecs.sha256_32 msg =
+      (Libcrux_specs.Fixed.sha256_32 msg).getOk (sha256_32_isOk msg) :=
+  (Libcrux_specs.Fixed.sha256_32 msg).getD_eq_getOk _ (sha256_32_isOk msg)
+
+end LibcruxSpecs.PanicFree

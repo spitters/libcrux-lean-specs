@@ -1,7 +1,7 @@
 /-
-Copyright (c) 2026 SSProve-Lean4 Contributors. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: SSProve-Lean4 Contributors
+Copyright (c) 2026 Bas Spitters. All rights reserved.
+Released under MIT license as described in the file LICENSE.
+Authors: Bas Spitters
 -/
 
 import LibcruxSpecs.Extracted

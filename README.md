@@ -38,7 +38,8 @@ lake build
 
 Requires Lean 4.28.0 (no other dependencies except Qq).
 
-## Origin
+## License
 
-These files originate from the [SSProve-lean](https://github.com/spitters/SSProve-lean) project.
-The hax prelude is adapted from [Cryspen's hax](https://github.com/hacspec/hax) Lean backend.
+`LibcruxSpecs/` and `rust-specs/` are MIT licensed (Copyright Bas Spitters).
+`Hax/` is adapted from [Cryspen's hax](https://github.com/hacspec/hax) Lean backend
+and retains the Apache License 2.0 (see `Hax/LICENSE`).

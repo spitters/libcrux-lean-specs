@@ -7,7 +7,8 @@ on:
     branches: [main, master]
 
 jobs:
-  build:
+  lean:
+    name: Lean build + sorry audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,3 +27,34 @@ jobs:
 
       - name: Build
         run: lake build
+
+      - name: Sorry audit
+        run: lake build LibcruxSpecs -- --run-linter=sorryIn
+
+  rust:
+    name: Rust specs tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust-specs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-specs/target
+          key: cargo-${{ hashFiles('rust-specs/Cargo.lock') }}
+          restore-keys: cargo-
+
+      - name: Run tests (proptest + Wycheproof)
+        run: cargo test --release
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings

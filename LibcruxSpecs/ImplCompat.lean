@@ -328,7 +328,8 @@ structure Core_models.Ops.Range.RangeTo (α : Type) where
 -/
 
 /-- while_loop_return: like while_loop but the body returns ControlFlow.
-    Break exits the loop early, Continue provides the next state. -/
+    Break exits the loop early, Continue provides the next state.
+    **Fuel-bounded** (10 000 iterations). See `while_loop'` for soundness caveat. -/
 noncomputable def Rust_primitives.Hax.while_loop_return {β R : Type}
     (inv : β → RustM Prop)
     (cond : β → RustM Bool)
@@ -352,7 +353,8 @@ noncomputable def Rust_primitives.Hax.while_loop_return {β R : Type}
   loop 10000 init
 
 /-- while_loop_cf: like while_loop but the body returns ControlFlow.
-    On Break, extracts the continuation value. On Continue, provides next state. -/
+    On Break, extracts the continuation value. On Continue, provides next state.
+    **Fuel-bounded** (10 000 iterations). See `while_loop'` for soundness caveat. -/
 noncomputable def Rust_primitives.Hax.while_loop_cf {β : Type}
     (inv : β → RustM Prop)
     (cond : β → RustM Bool)
@@ -408,7 +410,23 @@ but NOT u128 = BitVec 128. We add Cast instances for u128 ↔ all other types.
 The hax `while_loop` requires `pureInv`, `_pureTermination`, and `pureCond`
 proof parameters that `mvcgen` can't synthesize for complex extracted loops.
 We provide a fuel-based wrapper that avoids these proof obligations entirely.
-The fuel bound (100000) is sufficient for all crypto spec loops.
+
+### Soundness caveat
+
+The fuel bound (100000) is **not** verified to be sufficient for all inputs.
+If a loop exceeds the fuel budget, `while_loop_fuel` silently returns the
+current intermediate state rather than signalling an error. This means:
+
+1. Any theorem about the result of a fuel-bounded loop carries an implicit
+   assumption that the loop terminated within the fuel budget.
+2. For crypto spec loops on fixed-length (16/32-byte) inputs, the actual
+   iteration counts are small (e.g. SHA-256: 64 rounds, AES: 10 rounds),
+   so the 100 000 bound is conservative by orders of magnitude.
+3. For variable-length inputs (not currently used), the fuel bound would
+   need to be validated per-algorithm.
+
+A proper fix would replace fuel with a termination proof or return
+`Option β` on fuel exhaustion. This is tracked as future work.
 -/
 
 private def while_loop_fuel {β : Type}
