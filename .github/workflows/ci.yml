@@ -41,7 +41,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        # Pin to a specific version to avoid surprise lint failures from new
+        # stable releases. Bump deliberately when ready.
+        uses: dtolnay/rust-toolchain@1.93.0
+        with:
+          components: clippy
 
       - name: Cache cargo
         uses: actions/cache@v4
