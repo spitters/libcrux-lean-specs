@@ -315,6 +315,157 @@ instance OrOp_Shr_Output {α β : Type}
     OrOp (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) :=
   ‹OrOp inst.Output›
 
+-- Concrete Add/Mul on Mul.Output and Shr.Output for u128 field arithmetic
+-- (needed because hax extraction produces `(a *? b) +? c` where the result of `*?`
+-- has type `Mul.AssociatedTypes.Output u128 u128` and Lean can't see through it)
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) u128 where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) u128 where
+  add x y := pure (x + y)
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Bit.Shr.AssociatedTypes.Output u128 i32) u128 where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Bit.Shr.AssociatedTypes.Output u128 i32) u128 where
+  add x y := pure (x + y)
+instance : Cast (Core_models.Ops.Bit.Shr.AssociatedTypes.Output u128 i32) u64 where
+  cast x := pure (UInt64.ofNat x.toNat)
+instance : Core_models.Ops.Arith.Mul.AssociatedTypes
+    (Core_models.Ops.Bit.Shr.AssociatedTypes.Output u128 i32) u64 where
+  Output := u128
+instance : Core_models.Ops.Arith.Mul
+    (Core_models.Ops.Bit.Shr.AssociatedTypes.Output u128 i32) u64 where
+  mul x y := pure (x * BitVec.ofNat 128 y.toNat)
+
+-- Add on Mul.Output + Mul.Output (for schoolbook multiplication chains: (a*b) + (c*d))
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  add x y := pure (x + y)
+
+-- Add on Add.Output + Mul.Output (for chained: ((a*b)+(c*d)) + (e*f))
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  add (x : u128) (y : u128) := pure (x + y)
+
+-- Continue chain: (((a*b)+(c*d))+(e*f)) + (g*h)
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  add (x : u128) (y : u128) := pure (x + y)
+
+-- 4-deep chain: ((((a*b)+(c*d))+(e*f))+(g*h)) + (i*j)
+instance : Core_models.Ops.Arith.Add.AssociatedTypes
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+        (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+          (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+          (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  Output := u128
+instance : Core_models.Ops.Arith.Add
+    (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+      (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+        (Core_models.Ops.Arith.Add.AssociatedTypes.Output
+          (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128)
+          (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+        (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+      (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128))
+    (Core_models.Ops.Arith.Mul.AssociatedTypes.Output u128 u128) where
+  add (x : u128) (y : u128) := pure (x + y)
+
+-- Generic forwarding instances for Mul.AssociatedTypes.Output (same pattern as Shl_Output)
+instance Add_Mul_Output {α β γ : Type}
+    [inst : Core_models.Ops.Arith.Mul.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ]
+    [Core_models.Ops.Arith.Add inst.Output γ] :
+    Core_models.Ops.Arith.Add (Core_models.Ops.Arith.Mul.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Add inst.Output γ›
+
+instance Add_AssocTypes_Mul_Output {α β γ : Type}
+    [inst : Core_models.Ops.Arith.Mul.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ] :
+    Core_models.Ops.Arith.Add.AssociatedTypes (Core_models.Ops.Arith.Mul.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ›
+
+-- Cast from Mul.Output
+instance Cast_Mul_Output {α β γ : Type}
+    [inst : Core_models.Ops.Arith.Mul.AssociatedTypes α β]
+    [Cast inst.Output γ] :
+    Cast (Core_models.Ops.Arith.Mul.AssociatedTypes.Output α β) γ :=
+  ‹Cast inst.Output γ›
+
+-- HAnd on Mul.Output
+instance HAnd_Mul_Output {α β γ δ : Type}
+    [inst : Core_models.Ops.Arith.Mul.AssociatedTypes α β]
+    [HAnd inst.Output γ δ] :
+    HAnd (Core_models.Ops.Arith.Mul.AssociatedTypes.Output α β) γ δ :=
+  ‹HAnd inst.Output γ δ›
+
+-- Add on Shr output (for carry + r patterns)
+instance Add_Shr_Output {α β γ : Type}
+    [inst : Core_models.Ops.Bit.Shr.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ]
+    [Core_models.Ops.Arith.Add inst.Output γ] :
+    Core_models.Ops.Arith.Add (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Add inst.Output γ›
+
+instance Add_AssocTypes_Shr_Output {α β γ : Type}
+    [inst : Core_models.Ops.Bit.Shr.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ] :
+    Core_models.Ops.Arith.Add.AssociatedTypes (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Add.AssociatedTypes inst.Output γ›
+
+-- Cast from Shr.Output (for cast_op carry)
+instance Cast_Shr_Output {α β γ : Type}
+    [inst : Core_models.Ops.Bit.Shr.AssociatedTypes α β]
+    [Cast inst.Output γ] :
+    Cast (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) γ :=
+  ‹Cast inst.Output γ›
+
+-- Mul on Shr output (for carry * 19 patterns)
+instance Mul_Shr_Output {α β γ : Type}
+    [inst : Core_models.Ops.Bit.Shr.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Mul.AssociatedTypes inst.Output γ]
+    [Core_models.Ops.Arith.Mul inst.Output γ] :
+    Core_models.Ops.Arith.Mul (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Mul inst.Output γ›
+
+instance Mul_AssocTypes_Shr_Output {α β γ : Type}
+    [inst : Core_models.Ops.Bit.Shr.AssociatedTypes α β]
+    [Core_models.Ops.Arith.Mul.AssociatedTypes inst.Output γ] :
+    Core_models.Ops.Arith.Mul.AssociatedTypes (Core_models.Ops.Bit.Shr.AssociatedTypes.Output α β) γ :=
+  ‹Core_models.Ops.Arith.Mul.AssociatedTypes inst.Output γ›
+
 /-!
 ## RangeTo support
 -/

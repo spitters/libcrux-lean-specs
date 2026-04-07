@@ -1,7 +1,7 @@
 
 -- Experimental lean backend for Hax
 -- The Hax prelude library can be found in hax/proof-libs/lean
-import Hax
+import HaxPrelude
 import Std.Tactic.Do
 import Std.Do.Triple
 import Std.Tactic.Do.Syntax
@@ -2229,140 +2229,15 @@ def bytes_to_words_b (block : (RustSlice u8)) : RustM (RustArray u64 16) := do
 --  Panics if `out_len` is not in 1..=64 or `key.len()` exceeds 64.
 def blake2b (msg : (RustSlice u8)) (key : (RustSlice u8)) (out_len : usize) :
     RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global) := do
-  let _ ←
-    if
-    (← (Core_models.Ops.Bit.Not.not
-      (← ((← (Rust_primitives.Hax.Machine_int.ge out_len (1 : usize)))
-        &&? (← (Rust_primitives.Hax.Machine_int.le out_len (64 : usize)))))))
-    then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["blake2b: out_len must be 1..64"])))))
-    else
-      (pure Rust_primitives.Hax.Tuple0.mk);
-  let _ ←
-    if
-    (← (Core_models.Ops.Bit.Not.not
-      (← (Rust_primitives.Hax.Machine_int.le
-        (← (Core_models.Slice.Impl.len u8 key))
-        (64 : usize))))) then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["blake2b: key length must be 0..64"])))))
-    else
-      (pure Rust_primitives.Hax.Tuple0.mk);
-  let key_len : usize ← (Core_models.Slice.Impl.len u8 key);
-  let h : (RustArray u64 8) := IV_B;
-  let h : (RustArray u64 8) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      h
-      (0 : usize)
-      (← ((← h[(0 : usize)]_?)
-        ^^^? (← ((← ((16842752 : u64)
-            ^^^? (← ((← (Rust_primitives.Hax.cast_op key_len))
-              <<<? (8 : i32)))))
-          ^^^? (← (Rust_primitives.Hax.cast_op out_len)))))));
-  let data : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    if (← (Rust_primitives.Hax.Machine_int.gt key_len (0 : usize))) then
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl.with_capacity u8
-          (← (BLOCK_B +? (← (Core_models.Slice.Impl.len u8 msg)))));
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.extend_from_slice u8 Alloc.Alloc.Global d key);
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.resize u8 Alloc.Alloc.Global d BLOCK_B (0 : u8));
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.extend_from_slice u8 Alloc.Alloc.Global d msg);
-      (pure d)
-    else
-      (Alloc.Slice.Impl.to_vec u8 msg);
-  let h : (RustArray u64 8) ←
-    if (← (Alloc.Vec.Impl_1.is_empty u8 Alloc.Alloc.Global data)) then
-      let block : (RustArray u8 128) ←
-        (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
-      let m : (RustArray u64 16) ←
-        (bytes_to_words_b (← (Rust_primitives.unsize block)));
-      let h : (RustArray u64 8) ← (compress_b h m (0 : u128) true);
-      (pure h)
-    else
-      let total : usize ← (Alloc.Vec.Impl_1.len u8 Alloc.Alloc.Global data);
-      let offset : usize := (0 : usize);
-      let ⟨h, offset⟩ ←
-        (Rust_primitives.Hax.while_loop
-          (fun ⟨h, offset⟩ => (do (pure true) : RustM Bool))
-          (fun ⟨h, offset⟩ =>
-            (do (Rust_primitives.Hax.Machine_int.lt offset total) : RustM Bool))
-          (fun ⟨h, offset⟩ =>
-            (do
-            (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-            RustM Hax_lib.Int.Int))
-          (Rust_primitives.Hax.Tuple2.mk h offset)
-          (fun ⟨h, offset⟩ =>
-            (do
-            let remaining : usize ← (total -? offset);
-            let take : usize ←
-              if (← (Rust_primitives.Hax.Machine_int.gt remaining BLOCK_B)) then
-                (pure BLOCK_B)
-              else
-                (pure remaining);
-            let last : Bool ←
-              (Rust_primitives.Hax.Machine_int.le remaining BLOCK_B);
-            let block : (RustArray u8 128) ←
-              (Rust_primitives.Hax.repeat (0 : u8) (128 : usize));
-            let block : (RustArray u8 128) ←
-              (Rust_primitives.Hax.Folds.fold_range
-                (0 : usize)
-                take
-                (fun block _ => (do (pure true) : RustM Bool))
-                block
-                (fun block i =>
-                  (do
-                  (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-                    block
-                    i
-                    (← data[(← (offset +? i))]_?)) :
-                  RustM (RustArray u8 128))));
-            let bytes_compressed : usize ← (offset +? take);
-            let t : u128 ← (Rust_primitives.Hax.cast_op bytes_compressed);
-            let m : (RustArray u64 16) ←
-              (bytes_to_words_b (← (Rust_primitives.unsize block)));
-            let h : (RustArray u64 8) ← (compress_b h m t last);
-            let offset : usize ← (offset +? take);
-            (pure (Rust_primitives.Hax.Tuple2.mk h offset)) :
-            RustM (Rust_primitives.Hax.Tuple2 (RustArray u64 8) usize))));
-      (pure h);
-  let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Alloc.Vec.Impl.with_capacity u8 out_len);
-  let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      (8 : usize)
-      (fun out _ => (do (pure true) : RustM Bool))
-      out
-      (fun out i =>
-        (do
-        let word_bytes : (RustArray u8 8) ←
-          (Core_models.Num.Impl_9.to_le_bytes (← h[i]_?));
-        (Core_models.Iter.Traits.Iterator.Iterator.fold
-          (← (Core_models.Iter.Traits.Collect.IntoIterator.into_iter
-            (RustArray u8 8) word_bytes))
-          out
-          (fun out b =>
-            (do
-            if
-            (← (Rust_primitives.Hax.Machine_int.lt
-              (← (Alloc.Vec.Impl_1.len u8 Alloc.Alloc.Global out))
-              out_len)) then
-              let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-                (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global out b);
-              (pure out)
-            else
-              (pure out) :
-            RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))) :
-        RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global))));
-  (pure out)
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 --  BLAKE2s initialization vector: fractional parts of sqrt(2..19) truncated to 32 bits.
 def IV_S : (RustArray u32 8) :=
@@ -2675,140 +2550,15 @@ def bytes_to_words_s (block : (RustSlice u8)) : RustM (RustArray u32 16) := do
 --  Panics if `out_len` is not in 1..=32 or `key.len()` exceeds 32.
 def blake2s (msg : (RustSlice u8)) (key : (RustSlice u8)) (out_len : usize) :
     RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global) := do
-  let _ ←
-    if
-    (← (Core_models.Ops.Bit.Not.not
-      (← ((← (Rust_primitives.Hax.Machine_int.ge out_len (1 : usize)))
-        &&? (← (Rust_primitives.Hax.Machine_int.le out_len (32 : usize)))))))
-    then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["blake2s: out_len must be 1..32"])))))
-    else
-      (pure Rust_primitives.Hax.Tuple0.mk);
-  let _ ←
-    if
-    (← (Core_models.Ops.Bit.Not.not
-      (← (Rust_primitives.Hax.Machine_int.le
-        (← (Core_models.Slice.Impl.len u8 key))
-        (32 : usize))))) then
-      (Rust_primitives.Hax.never_to_any
-        (← (Core_models.Panicking.panic_fmt
-          (← (Core_models.Fmt.Rt.Impl_1.new_const ((1 : usize))
-            #v["blake2s: key length must be 0..32"])))))
-    else
-      (pure Rust_primitives.Hax.Tuple0.mk);
-  let key_len : usize ← (Core_models.Slice.Impl.len u8 key);
-  let h : (RustArray u32 8) := IV_S;
-  let h : (RustArray u32 8) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      h
-      (0 : usize)
-      (← ((← h[(0 : usize)]_?)
-        ^^^? (← ((← ((16842752 : u32)
-            ^^^? (← ((← (Rust_primitives.Hax.cast_op key_len))
-              <<<? (8 : i32)))))
-          ^^^? (← (Rust_primitives.Hax.cast_op out_len)))))));
-  let data : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    if (← (Rust_primitives.Hax.Machine_int.gt key_len (0 : usize))) then
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl.with_capacity u8
-          (← (BLOCK_S +? (← (Core_models.Slice.Impl.len u8 msg)))));
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.extend_from_slice u8 Alloc.Alloc.Global d key);
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.resize u8 Alloc.Alloc.Global d BLOCK_S (0 : u8));
-      let d : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-        (Alloc.Vec.Impl_2.extend_from_slice u8 Alloc.Alloc.Global d msg);
-      (pure d)
-    else
-      (Alloc.Slice.Impl.to_vec u8 msg);
-  let h : (RustArray u32 8) ←
-    if (← (Alloc.Vec.Impl_1.is_empty u8 Alloc.Alloc.Global data)) then
-      let block : (RustArray u8 64) ←
-        (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
-      let m : (RustArray u32 16) ←
-        (bytes_to_words_s (← (Rust_primitives.unsize block)));
-      let h : (RustArray u32 8) ← (compress_s h m (0 : u64) true);
-      (pure h)
-    else
-      let total : usize ← (Alloc.Vec.Impl_1.len u8 Alloc.Alloc.Global data);
-      let offset : usize := (0 : usize);
-      let ⟨h, offset⟩ ←
-        (Rust_primitives.Hax.while_loop
-          (fun ⟨h, offset⟩ => (do (pure true) : RustM Bool))
-          (fun ⟨h, offset⟩ =>
-            (do (Rust_primitives.Hax.Machine_int.lt offset total) : RustM Bool))
-          (fun ⟨h, offset⟩ =>
-            (do
-            (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
-            RustM Hax_lib.Int.Int))
-          (Rust_primitives.Hax.Tuple2.mk h offset)
-          (fun ⟨h, offset⟩ =>
-            (do
-            let remaining : usize ← (total -? offset);
-            let take : usize ←
-              if (← (Rust_primitives.Hax.Machine_int.gt remaining BLOCK_S)) then
-                (pure BLOCK_S)
-              else
-                (pure remaining);
-            let last : Bool ←
-              (Rust_primitives.Hax.Machine_int.le remaining BLOCK_S);
-            let block : (RustArray u8 64) ←
-              (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
-            let block : (RustArray u8 64) ←
-              (Rust_primitives.Hax.Folds.fold_range
-                (0 : usize)
-                take
-                (fun block _ => (do (pure true) : RustM Bool))
-                block
-                (fun block i =>
-                  (do
-                  (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-                    block
-                    i
-                    (← data[(← (offset +? i))]_?)) :
-                  RustM (RustArray u8 64))));
-            let bytes_compressed : usize ← (offset +? take);
-            let t : u64 ← (Rust_primitives.Hax.cast_op bytes_compressed);
-            let m : (RustArray u32 16) ←
-              (bytes_to_words_s (← (Rust_primitives.unsize block)));
-            let h : (RustArray u32 8) ← (compress_s h m t last);
-            let offset : usize ← (offset +? take);
-            (pure (Rust_primitives.Hax.Tuple2.mk h offset)) :
-            RustM (Rust_primitives.Hax.Tuple2 (RustArray u32 8) usize))));
-      (pure h);
-  let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Alloc.Vec.Impl.with_capacity u8 out_len);
-  let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      (8 : usize)
-      (fun out _ => (do (pure true) : RustM Bool))
-      out
-      (fun out i =>
-        (do
-        let word_bytes : (RustArray u8 4) ←
-          (Core_models.Num.Impl_8.to_le_bytes (← h[i]_?));
-        (Core_models.Iter.Traits.Iterator.Iterator.fold
-          (← (Core_models.Iter.Traits.Collect.IntoIterator.into_iter
-            (RustArray u8 4) word_bytes))
-          out
-          (fun out b =>
-            (do
-            if
-            (← (Rust_primitives.Hax.Machine_int.lt
-              (← (Alloc.Vec.Impl_1.len u8 Alloc.Alloc.Global out))
-              out_len)) then
-              let out : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-                (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global out b);
-              (pure out)
-            else
-              (pure out) :
-            RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))) :
-        RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global))));
-  (pure out)
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 end Libcrux_specs.Blake2
 
@@ -2832,125 +2582,15 @@ def OPAD : u8 := (92 : u8)
 --  4. result = SHA-256((key_padded XOR opad) || inner)
 def hmac_sha256 (key : (RustSlice u8)) (msg : (RustSlice u8)) :
     RustM (RustArray u8 32) := do
-  let key_hash : (RustArray u8 32) ←
-    if
-    (← (Rust_primitives.Hax.Machine_int.gt
-      (← (Core_models.Slice.Impl.len u8 key))
-      BLOCK_SIZE)) then
-      (Libcrux_specs.Sha256.sha256 key)
-    else
-      (Rust_primitives.Hax.repeat (0 : u8) (32 : usize));
-  let key_bytes : (RustSlice u8) ←
-    if
-    (← (Rust_primitives.Hax.Machine_int.gt
-      (← (Core_models.Slice.Impl.len u8 key))
-      BLOCK_SIZE)) then
-      (Rust_primitives.unsize key_hash)
-    else
-      (pure key);
-  let key_padded : (RustArray u8 64) ←
-    (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
-  let key_padded : (RustArray u8 64) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      (← (Core_models.Slice.Impl.len u8 key_bytes))
-      (fun key_padded _ => (do (pure true) : RustM Bool))
-      key_padded
-      (fun key_padded i =>
-        (do
-        (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-          key_padded
-          i
-          (← key_bytes[i]_?)) :
-        RustM (RustArray u8 64))));
-  let inner_key : (RustArray u8 64) ←
-    (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
-  let inner_key : (RustArray u8 64) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      BLOCK_SIZE
-      (fun inner_key _ => (do (pure true) : RustM Bool))
-      inner_key
-      (fun inner_key i =>
-        (do
-        (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-          inner_key
-          i
-          (← ((← key_padded[i]_?) ^^^? IPAD))) :
-        RustM (RustArray u8 64))));
-  let inner_data : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Alloc.Vec.Impl.with_capacity u8
-      (← (BLOCK_SIZE +? (← (Core_models.Slice.Impl.len u8 msg)))));
-  let inner_data : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      BLOCK_SIZE
-      (fun inner_data _ => (do (pure true) : RustM Bool))
-      inner_data
-      (fun inner_data i =>
-        (do
-        (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global
-          inner_data
-          (← inner_key[i]_?)) :
-        RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global))));
-  let inner_data : (Alloc.Vec.Vec u8 Alloc.Alloc.Global) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      (← (Core_models.Slice.Impl.len u8 msg))
-      (fun inner_data _ => (do (pure true) : RustM Bool))
-      inner_data
-      (fun inner_data i =>
-        (do
-        (Alloc.Vec.Impl_1.push u8 Alloc.Alloc.Global inner_data (← msg[i]_?)) :
-        RustM (Alloc.Vec.Vec u8 Alloc.Alloc.Global))));
-  let inner_hash : (RustArray u8 32) ←
-    (Libcrux_specs.Sha256.sha256
-      (← (Core_models.Ops.Deref.Deref.deref
-        (Alloc.Vec.Vec u8 Alloc.Alloc.Global) inner_data)));
-  let outer_key : (RustArray u8 64) ←
-    (Rust_primitives.Hax.repeat (0 : u8) (64 : usize));
-  let outer_key : (RustArray u8 64) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      BLOCK_SIZE
-      (fun outer_key _ => (do (pure true) : RustM Bool))
-      outer_key
-      (fun outer_key i =>
-        (do
-        (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-          outer_key
-          i
-          (← ((← key_padded[i]_?) ^^^? OPAD))) :
-        RustM (RustArray u8 64))));
-  let outer_data : (RustArray u8 96) ←
-    (Rust_primitives.Hax.repeat (0 : u8) (96 : usize));
-  let outer_data : (RustArray u8 96) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      BLOCK_SIZE
-      (fun outer_data _ => (do (pure true) : RustM Bool))
-      outer_data
-      (fun outer_data i =>
-        (do
-        (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-          outer_data
-          i
-          (← outer_key[i]_?)) :
-        RustM (RustArray u8 96))));
-  let outer_data : (RustArray u8 96) ←
-    (Rust_primitives.Hax.Folds.fold_range
-      (0 : usize)
-      (32 : usize)
-      (fun outer_data _ => (do (pure true) : RustM Bool))
-      outer_data
-      (fun outer_data i =>
-        (do
-        (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-          outer_data
-          (← (BLOCK_SIZE +? i))
-          (← inner_hash[i]_?)) :
-        RustM (RustArray u8 96))));
-  (Libcrux_specs.Sha256.sha256 (← (Rust_primitives.unsize outer_data)))
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 end Libcrux_specs.Hmac
 
@@ -5393,19 +5033,12 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
 def aes_gcm_encrypt_generic
     (impl_Fn([u8;_16])_-__[u8;_16] : Type)
     [trait_constr_aes_gcm_encrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
+      Core_models.Ops.Function.FnOnce.AssociatedTypes
       impl_Fn([u8;_16])_-__[u8;_16]
       (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     [trait_constr_aes_gcm_encrypt_generic_i0 : Core_models.Ops.Function.Fn
       impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
+      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
@@ -5573,19 +5206,12 @@ def aes_gcm_encrypt_generic
 def aes_gcm_decrypt_generic
     (impl_Fn([u8;_16])_-__[u8;_16] : Type)
     [trait_constr_aes_gcm_decrypt_generic_associated_type_i0 :
-      Core_models.Ops.Function.Fn.AssociatedTypes
+      Core_models.Ops.Function.FnOnce.AssociatedTypes
       impl_Fn([u8;_16])_-__[u8;_16]
       (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     [trait_constr_aes_gcm_decrypt_generic_i0 : Core_models.Ops.Function.Fn
       impl_Fn([u8;_16])_-__[u8;_16]
-      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-      (associatedTypes := {
-        show
-          Core_models.Ops.Function.Fn.AssociatedTypes
-          impl_Fn([u8;_16])_-__[u8;_16]
-          (Rust_primitives.Hax.Tuple1 (RustArray u8 16))
-        by infer_instance
-        with sorry})]
+      (Rust_primitives.Hax.Tuple1 (RustArray u8 16))]
     (key_encrypt : impl_Fn([u8;_16])_-__[u8;_16])
     (nonce : (RustArray u8 12))
     (aad : (RustSlice u8))
@@ -5881,74 +5507,15 @@ def fe_one (_ : Rust_primitives.Hax.Tuple0) : RustM (RustArray u64 5) := do
 --  Propagate carries across limbs, reducing mod p = 2^255 - 19.
 --  After this, each limb is at most 51 bits.
 def fe_carry (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do
-  let r : (RustArray u64 5) := a;
-  let carry : u64 ← ((← r[(0 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← r[(0 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (1 : usize)
-      (← ((← r[(1 : usize)]_?) +? carry)));
-  let carry : u64 ← ((← r[(1 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (1 : usize)
-      (← ((← r[(1 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (2 : usize)
-      (← ((← r[(2 : usize)]_?) +? carry)));
-  let carry : u64 ← ((← r[(2 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (2 : usize)
-      (← ((← r[(2 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (3 : usize)
-      (← ((← r[(3 : usize)]_?) +? carry)));
-  let carry : u64 ← ((← r[(3 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (3 : usize)
-      (← ((← r[(3 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (4 : usize)
-      (← ((← r[(4 : usize)]_?) +? carry)));
-  let carry : u64 ← ((← r[(4 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (4 : usize)
-      (← ((← r[(4 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← r[(0 : usize)]_?) +? (← (carry *? (19 : u64))))));
-  let carry : u64 ← ((← r[(0 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← r[(0 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (1 : usize)
-      (← ((← r[(1 : usize)]_?) +? carry)));
-  (pure r)
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 --  Field addition with carry propagation.
 def fe_add (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
@@ -5986,98 +5553,15 @@ def fe_sub (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
 --  it wraps to limb (i-5) with a factor of 19.
 def fe_mul (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
     RustM (RustArray u64 5) := do
-  let b1_19 : u128 ←
-    ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (← b[(1 : usize)]_?))));
-  let b2_19 : u128 ←
-    ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (← b[(2 : usize)]_?))));
-  let b3_19 : u128 ←
-    ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (← b[(3 : usize)]_?))));
-  let b4_19 : u128 ←
-    ((19 : u128) *? (← (Rust_primitives.Hax.cast_op (← b[(4 : usize)]_?))));
-  let a0 : u128 ← (Rust_primitives.Hax.cast_op (← a[(0 : usize)]_?));
-  let a1 : u128 ← (Rust_primitives.Hax.cast_op (← a[(1 : usize)]_?));
-  let a2 : u128 ← (Rust_primitives.Hax.cast_op (← a[(2 : usize)]_?));
-  let a3 : u128 ← (Rust_primitives.Hax.cast_op (← a[(3 : usize)]_?));
-  let a4 : u128 ← (Rust_primitives.Hax.cast_op (← a[(4 : usize)]_?));
-  let b0 : u128 ← (Rust_primitives.Hax.cast_op (← b[(0 : usize)]_?));
-  let b1 : u128 ← (Rust_primitives.Hax.cast_op (← b[(1 : usize)]_?));
-  let b2 : u128 ← (Rust_primitives.Hax.cast_op (← b[(2 : usize)]_?));
-  let b3 : u128 ← (Rust_primitives.Hax.cast_op (← b[(3 : usize)]_?));
-  let b4 : u128 ← (Rust_primitives.Hax.cast_op (← b[(4 : usize)]_?));
-  let r0 : u128 ←
-    ((← ((← ((← ((← (a0 *? b0)) +? (← (a1 *? b4_19)))) +? (← (a2 *? b3_19))))
-        +? (← (a3 *? b2_19))))
-      +? (← (a4 *? b1_19)));
-  let r1 : u128 ←
-    ((← ((← ((← ((← (a0 *? b1)) +? (← (a1 *? b0)))) +? (← (a2 *? b4_19))))
-        +? (← (a3 *? b3_19))))
-      +? (← (a4 *? b2_19)));
-  let r2 : u128 ←
-    ((← ((← ((← ((← (a0 *? b2)) +? (← (a1 *? b1)))) +? (← (a2 *? b0))))
-        +? (← (a3 *? b4_19))))
-      +? (← (a4 *? b3_19)));
-  let r3 : u128 ←
-    ((← ((← ((← ((← (a0 *? b3)) +? (← (a1 *? b2)))) +? (← (a2 *? b1))))
-        +? (← (a3 *? b0))))
-      +? (← (a4 *? b4_19)));
-  let r4 : u128 ←
-    ((← ((← ((← ((← (a0 *? b4)) +? (← (a1 *? b3)))) +? (← (a2 *? b2))))
-        +? (← (a3 *? b1))))
-      +? (← (a4 *? b0)));
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (0 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op r0)) &&&? MASK51)));
-  let carry : u128 ← (r0 >>>? (51 : i32));
-  let s1 : u128 ← (r1 +? carry);
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (1 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op s1)) &&&? MASK51)));
-  let carry : u128 ← (s1 >>>? (51 : i32));
-  let s2 : u128 ← (r2 +? carry);
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (2 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op s2)) &&&? MASK51)));
-  let carry : u128 ← (s2 >>>? (51 : i32));
-  let s3 : u128 ← (r3 +? carry);
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (3 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op s3)) &&&? MASK51)));
-  let carry : u128 ← (s3 >>>? (51 : i32));
-  let s4 : u128 ← (r4 +? carry);
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (4 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op s4)) &&&? MASK51)));
-  let carry : u128 ← (s4 >>>? (51 : i32));
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (0 : usize)
-      (← ((← out[(0 : usize)]_?)
-        +? (← ((← (Rust_primitives.Hax.cast_op carry)) *? (19 : u64))))));
-  let c : u64 ← ((← out[(0 : usize)]_?) >>>? (51 : i32));
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (0 : usize)
-      (← ((← out[(0 : usize)]_?) &&&? MASK51)));
-  let out : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      out
-      (1 : usize)
-      (← ((← out[(1 : usize)]_?) +? c)));
-  (pure out)
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 --  Field squaring.
 def fe_sq (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do (fe_mul a a)
@@ -6439,70 +5923,15 @@ def cswap (swap : u64) (a : (RustArray u64 5)) (b : (RustArray u64 5)) :
 
 --  Multiply a field element by the small constant 121666.
 def fe_mul_121666 (a : (RustArray u64 5)) : RustM (RustArray u64 5) := do
-  let c : u128 ← (Rust_primitives.Hax.cast_op A24);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.repeat (0 : u64) (5 : usize));
-  let t : u128 ← ((← (Rust_primitives.Hax.cast_op (← a[(0 : usize)]_?))) *? c);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op t)) &&&? MASK51)));
-  let carry : u128 ← (t >>>? (51 : i32));
-  let t : u128 ←
-    ((← ((← (Rust_primitives.Hax.cast_op (← a[(1 : usize)]_?))) *? c))
-      +? carry);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (1 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op t)) &&&? MASK51)));
-  let carry : u128 ← (t >>>? (51 : i32));
-  let t : u128 ←
-    ((← ((← (Rust_primitives.Hax.cast_op (← a[(2 : usize)]_?))) *? c))
-      +? carry);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (2 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op t)) &&&? MASK51)));
-  let carry : u128 ← (t >>>? (51 : i32));
-  let t : u128 ←
-    ((← ((← (Rust_primitives.Hax.cast_op (← a[(3 : usize)]_?))) *? c))
-      +? carry);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (3 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op t)) &&&? MASK51)));
-  let carry : u128 ← (t >>>? (51 : i32));
-  let t : u128 ←
-    ((← ((← (Rust_primitives.Hax.cast_op (← a[(4 : usize)]_?))) *? c))
-      +? carry);
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (4 : usize)
-      (← ((← (Rust_primitives.Hax.cast_op t)) &&&? MASK51)));
-  let carry : u128 ← (t >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← r[(0 : usize)]_?)
-        +? (← ((← (Rust_primitives.Hax.cast_op carry)) *? (19 : u64))))));
-  let c2 : u64 ← ((← r[(0 : usize)]_?) >>>? (51 : i32));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (0 : usize)
-      (← ((← r[(0 : usize)]_?) &&&? MASK51)));
-  let r : (RustArray u64 5) ←
-    (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
-      r
-      (1 : usize)
-      (← ((← r[(1 : usize)]_?) +? c2)));
-  (pure r)
+  (Rust_primitives.Hax.failure
+    "something is not implemented yet.
+Sorry, Hax does not support declare-first let bindings (see https://doc.rust-lang.org/rust-by-example/variable_bindings/declare.html) for now.
+
+This is discussed in issue https://github.com/hacspec/hax/issues/156.
+Please upvote or comment this issue if you see this error message.
+Note: the error was labeled with context `AST import`.
+"
+    "")
 
 --  X25519 scalar multiplication (RFC 7748).
 -- 
