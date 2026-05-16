@@ -18,4 +18,4 @@ lean_lib «LibcruxSpecs» where
   srcDir := "."
 
 require Qq from git
-  "https://github.com/leanprover-community/quote4" @ "b8f98e9087e02c8553945a2c5abf07cec8e798c3"
+  "https://github.com/leanprover-community/quote4" @ "707efb56d0696634e9e965523a1bbe9ac6ce141d"
