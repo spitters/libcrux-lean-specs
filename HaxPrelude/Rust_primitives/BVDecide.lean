@@ -81,7 +81,12 @@ theorem RustM.Triple_iff_BitVec {α} [Inhabited α]
     ⦃ ⌜ a ⌝ ⦄ x ⦃ ⇓ r => ⌜ b r ⌝ ⦄ ↔
       (!decide a || (x.toBVRustM.ok && decide (b x.toBVRustM.val))) := by
   cases x using RustM.toBVRustM.match_1 <;>
-    by_cases a <;> simp [Triple, RustM.toBVRustM, Decidable.imp_iff_not_or]
+    by_cases a <;>
+    simp [Triple, RustM.toBVRustM, Decidable.imp_iff_not_or, wp, PredTrans.const,
+          PredTrans.pure, PostCond.noThrow, ExceptConds.const, ExceptConds.false,
+          Pure.pure, Except.pure, Except.instWP, ExceptT.instWP,
+          PredTrans.pushExcept, Except.instWP._aux_1, throw, MonadExceptOf.throw,
+          ExceptT.run, Id.run, PredTrans.apply]
 
 /-- This lemma is used to make some variants of `>>>?` accessible for `bv_decide` -/
 @[hax_bv_decide]

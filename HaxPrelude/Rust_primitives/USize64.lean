@@ -120,7 +120,7 @@ def USize64.decLt (a b : USize64) : Decidable (a < b) :=
 def USize64.decLe (a b : USize64) : Decidable (a ≤ b) :=
   inferInstanceAs (Decidable (a.toBitVec ≤ b.toBitVec))
 
-attribute [instance] USize64.decLt USize64.decLe
+attribute [reducible, instance] USize64.decLt USize64.decLe
 
 instance : Max USize64 := maxOfLe
 instance : Min USize64 := minOfLe
@@ -286,11 +286,11 @@ instance : ToInt.LT USize64 (.uint 64) where
   lt_iff x y := by simpa using USize64.lt_iff_toBitVec_lt
 
 
-@[expose]
+@[expose, reducible]
 def USize64.natCast : NatCast USize64 where
   natCast x := USize64.ofNat x
 
-@[expose]
+@[expose, reducible]
 def USize64.intCast : IntCast USize64 where
   intCast x := USize64.ofInt x
 

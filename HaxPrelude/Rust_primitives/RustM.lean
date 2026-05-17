@@ -78,31 +78,24 @@ instance instMonad : Monad RustM where
 @[simp]
 instance instLawfulMonad : LawfulMonad RustM where
   id_map x := by
-    dsimp [id, Functor.map]
-    cases x;
-    all_goals grind
+    cases x <;> rfl
   map_const := by
     intros α β
-    dsimp [Functor.map, Functor.mapConst]
+    rfl
   seqLeft_eq x y := by
-    dsimp [Functor.map, SeqLeft.seqLeft, Seq.seq]
-    cases x ; all_goals cases y
-    all_goals try simp
+    cases x <;> cases y <;> rfl
   seqRight_eq x y := by
-    dsimp [Functor.map, SeqRight.seqRight, Seq.seq]
-    cases x ; all_goals cases y
-    all_goals try simp
+    cases x <;> cases y <;> rfl
   pure_seq g x := by
-    dsimp [Functor.map, Seq.seq, pure]
+    rfl
   bind_pure_comp f x := by
-    dsimp [Functor.map]
+    cases x <;> rfl
   bind_map f x := by
-    dsimp [Functor.map, bind, pure, Seq.seq]
+    cases f <;> cases x <;> rfl
   pure_bind x f := by
-    dsimp [pure, bind, pure]
+    rfl
   bind_assoc x f g := by
-    dsimp [pure, bind]
-    cases x; all_goals simp
+    cases x <;> rfl
 
 @[simp]
 instance instWP : WP RustM (.except Error .pure) where
@@ -113,11 +106,9 @@ instance instWP : WP RustM (.except Error .pure) where
 
 @[simp]
 instance instWPMonad : WPMonad RustM (.except Error .pure) where
-  wp_pure := by intros; ext Q; simp [wp, PredTrans.pure, Pure.pure, Except.pure, Id.run]
+  wp_pure a := rfl
   wp_bind x f := by
-    simp only [instWP]
-    ext Q
-    cases x <;> simp [PredTrans.bind, PredTrans.const, Bind.bind]
+    cases x <;> rfl
 
 @[default_instance]
 instance instCoe {α} : Coe α (RustM α) where
