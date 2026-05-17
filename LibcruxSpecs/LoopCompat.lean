@@ -90,11 +90,12 @@ theorem while_loop_fuel_isOk {β : Type} (cond : β → RustM Bool) (body : β �
     have hc := hcond init
     match h_cond : cond init, hc with
     | .ok true, _ =>
-      simp [h_cond, RustM.bind]
       have hb := hbody init
       match h_body : body init, hb with
-      | .ok v, _ => simp [h_body, RustM.bind]; exact ih v
-    | .ok false, _ => simp [h_cond, RustM.bind]
+      | .ok v, _ =>
+        show (while_loop_fuel cond body k v).isOk = true
+        exact ih v
+    | .ok false, _ => rfl
 
 def Rust_primitives.Hax.while_loop' {β : Type}
     (_inv : β → RustM Prop)
