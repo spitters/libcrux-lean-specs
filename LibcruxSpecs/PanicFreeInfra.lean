@@ -105,7 +105,9 @@ theorem vec_len_isOk (α A : Type) (v : Alloc.Vec.Vec α Alloc.Alloc.Global) :
 /-! ## Loops
 
 The `while_loop'_isOk` lemma is in `LoopCompat.lean` (where it has access
-to the private `while_loop_fuel`). `fold_range_isOk` is TODO. -/
+to the private `while_loop_fuel`). A `fold_range_isOk` helper would follow
+the same shape but the underlying `for i in [s:e]` desugaring is intricate;
+we leave it TODO until the desugaring lemmas stabilise upstream. -/
 
 /-! ## Bind composition -/
 

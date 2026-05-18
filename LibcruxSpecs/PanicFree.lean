@@ -94,25 +94,76 @@ theorem RustM.bind_isOk' {α β : Type} (x : RustM α) (f : α → RustM β)
 
 /-! ## Panic-freedom predicates -/
 
-/-- SHA-256 on 32-byte input does not panic. -/
+/-! ### SHA-256 family
+
+Leaf-function helpers below mirror the AES helper pattern (`aes128_key_expand_isOk`,
+`aes_encrypt_rounds_isOk`): they are kept as named TODOs so the wrapper-level
+proofs are genuine compositions. -/
+
+/-- Helper: the inner `Libcrux_specs.Sha256.sha256` always succeeds on any slice.
+    (Proof TODO — requires reasoning through 4 nested `fold_range`s, byte-length
+    arithmetic, and the `Sha256.compress` block function.) -/
+theorem sha256_isOk (msg : Array UInt8) :
+    (Libcrux_specs.Sha256.sha256 msg).isOk = true := by
+  sorry  -- TODO: deep proof through 4 nested fold_range loops + compress
+
+/-- SHA-256 on 32-byte input does not panic.
+    Compositional: `unsize msg` then `Sha256.sha256`. -/
 theorem sha256_32_isOk (msg : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.sha256_32 msg) := by
-  sorry
+  unfold RustM.IsOk Libcrux_specs.Fixed.sha256_32
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact unsize_isOk msg
+  intro slice
+  exact sha256_isOk slice
 
-/-- HMAC-SHA256 on 32-byte key and message does not panic. -/
+/-- Helper: the inner `Libcrux_specs.Hmac.hmac_sha256` always succeeds.
+    (Proof TODO — requires `sha256_isOk` plus reasoning through ~8 nested
+    `fold_range`s and `Vec` capacity arithmetic.) -/
+theorem hmac_sha256_isOk (key msg : Array UInt8) :
+    (Libcrux_specs.Hmac.hmac_sha256 key msg).isOk = true := by
+  sorry  -- TODO: deep proof; reduces to sha256_isOk + length arithmetic
+
+/-- HMAC-SHA256 on 32-byte key and message does not panic.
+    Compositional: two `unsize` calls then `Hmac.hmac_sha256`. -/
 theorem hmac_sha256_32_isOk (key msg : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.hmac_sha256_32 key msg) := by
-  sorry
+  unfold RustM.IsOk Libcrux_specs.Fixed.hmac_sha256_32
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact unsize_isOk key
+  intro key_slice
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact unsize_isOk msg
+  intro msg_slice
+  exact hmac_sha256_isOk key_slice msg_slice
 
-/-- HKDF-Extract on 32-byte salt and IKM does not panic. -/
+/-- Helper: the inner `Libcrux_specs.Hkdf.hkdf_extract` always succeeds.
+    (Proof TODO — reduces to `hmac_sha256_isOk` after a branch on whether the
+    salt is empty.) -/
+theorem hkdf_extract_isOk (salt ikm : Array UInt8) :
+    (Libcrux_specs.Hkdf.hkdf_extract salt ikm).isOk = true := by
+  sorry  -- TODO: branch + delegate to hmac_sha256_isOk
+
+/-- HKDF-Extract on 32-byte salt and IKM does not panic.
+    Compositional: two `unsize` calls then `Hkdf.hkdf_extract`. -/
 theorem hkdf_extract_32_isOk (salt ikm : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.hkdf_extract_32 salt ikm) := by
-  sorry
+  unfold RustM.IsOk Libcrux_specs.Fixed.hkdf_extract_32
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact unsize_isOk salt
+  intro salt_slice
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact unsize_isOk ikm
+  intro ikm_slice
+  exact hkdf_extract_isOk salt_slice ikm_slice
 
-/-- HKDF-Expand on 32-byte PRK and info does not panic. -/
+/-- HKDF-Expand on 32-byte PRK and info does not panic.
+    (TODO — requires `hmac_sha256_isOk` plus a `fold_range_isOk` argument over
+    the inner OKM-extraction loop and a length-invariant on `hkdf_expand`'s
+    output `Vec`. Blocked on `fold_range_isOk` infrastructure.) -/
 theorem hkdf_expand_32_isOk (prk info : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.hkdf_expand_32 prk info) := by
-  sorry
+  sorry  -- TODO: requires `fold_range_isOk` + `hkdf_expand_isOk` length invariant
 
 /-- Helper: AES-128 key expansion always succeeds. (Proof TODO) -/
 theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
@@ -148,7 +199,8 @@ theorem aes128_encrypt_isOk (key pt : Vector UInt8 16) :
   -- Goal: 11 ≤ slice.size
   -- From hsl : Rust_primitives.unsize round_keys = .ok slice we get slice = round_keys.toArray
   unfold Rust_primitives.unsize at hsl
-  simp at hsl
+  -- hsl : pure round_keys.toArray = .ok slice, i.e. .ok round_keys.toArray = .ok slice
+  injection hsl with hsl
   rw [← hsl]
   simp [Vector.size_toArray]
 
@@ -192,15 +244,26 @@ theorem x25519_base_isOk (k : Vector UInt8 32) :
   -- Step 3: scalarmult k base' — by helper lemma
   exact curve25519_x25519_scalarmult_isOk k base'
 
-/-- P-256 scalar multiplication does not panic. -/
-theorem p256_scalar_mult_32_isOk (k p : Vector UInt8 32) :
-    RustM.IsOk (Libcrux_specs.Fixed.p256_scalar_mult_32 k p) := by
-  sorry
+/-! ### P-256 family
+
+The clean compositional pattern (à la `aes128_encrypt_isOk`) would require
+helpers for `P256.base_mult`, `P256.scalar_mult`, `Fixed.p256_to_affine`,
+`P256.fp_to_bytes`, `P256.fp_from_bytes`, `Fixed.fp_sqrt_p256`, and the
+four field-arithmetic operations (`fp_sq`, `fp_mul`, `fp_add`, `fp_sub`).
+Each helper would still be a deep TODO — limb-bounded Montgomery ladder for
+`scalar_mult`/`base_mult`, nested 4×8 `while_loop'` for `fp_to_bytes`/
+`fp_from_bytes`, 255-iter `fold_range` for `fp_sqrt_p256`. We keep these as
+a single TODO at the wrapper level until field-arithmetic helpers land. -/
 
 /-- P-256 base point multiplication does not panic. -/
 theorem p256_base_mult_32_isOk (k : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.p256_base_mult_32 k) := by
-  sorry
+  sorry  -- TODO: needs P256 field-arithmetic and scalar-multiplication isOk helpers
+
+/-- P-256 scalar multiplication does not panic. -/
+theorem p256_scalar_mult_32_isOk (k p : Vector UInt8 32) :
+    RustM.IsOk (Libcrux_specs.Fixed.p256_scalar_mult_32 k p) := by
+  sorry  -- TODO: needs P256 field-arithmetic and scalar-multiplication isOk helpers
 
 /-! ## Consequence: `getD` faithfulness
 
