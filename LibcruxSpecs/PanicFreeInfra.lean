@@ -434,6 +434,37 @@ theorem usize_add_one_toNat {N : Nat} (i i' : usize) (h : i.toNat < N) (hN : N +
   · rw [h1]
   · rw [h1]; omega
 
+/-- When `Machine_int.gt i bound` returns `.ok true`, derive `bound.toNat < i.toNat`. -/
+theorem usize_gt_of_machine_gt {i bound : usize}
+    (h : Rust_primitives.Hax.Machine_int.gt i bound = .ok true) :
+    bound.toNat < i.toNat := by
+  have : bound < i := by
+    have := h
+    unfold Rust_primitives.Hax.Machine_int.gt at this
+    have e : (pure (i > bound) : RustM Bool) = .ok (decide (i > bound)) := rfl
+    rw [e] at this
+    have : decide (i > bound) = true := RustM.ok.inj this
+    exact of_decide_eq_true this
+  exact USize64.lt_iff_toNat_lt.mp this
+
+/-- Step after `i -? (1 : usize)` with `1 ≤ i.toNat`: the result has
+    `toNat = i.toNat - 1`. -/
+theorem usize_sub_one_toNat (i i' : usize) (h : 1 ≤ i.toNat)
+    (heq : (i -? (1 : usize)) = .ok i') : i'.toNat = i.toNat - 1 := by
+  have h1 : (1 : usize).toNat = 1 := rfl
+  have hnov : ¬ BitVec.usubOverflow i.toBitVec (1 : usize).toBitVec := by
+    simp [BitVec.usubOverflow]; omega
+  have heq' : (if BitVec.usubOverflow i.toBitVec (1 : usize).toBitVec
+               then RustM.fail Error.integerOverflow
+               else pure (i - (1 : usize))) = .ok i' := heq
+  rw [if_neg hnov] at heq'
+  have : i' = i - (1 : usize) := by
+    have := RustM.ok.inj heq'
+    exact this.symm
+  rw [this, USize64.toNat_sub_of_le']
+  · rw [h1]
+  · rw [h1]; omega
+
 /-- Extract a witness from a successful `RustM` value: if `x.isOk = true`, then
     `x = .ok a` for some `a`, and `x >>= f = f a`. Used to step through bind
     chains symbolically inside invariant-preservation proofs. -/
@@ -2493,5 +2524,88 @@ theorem fe_loose_of_fe_fresh {v : Vector UInt64 5} (h : fe_fresh v) : fe_loose v
   obtain ⟨h0, h1, h2, h3, h4⟩ := h
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   all_goals omega
+
+/-! ### u64 arithmetic helpers (for Curve25519 limb chains) -/
+
+/-- `u64` addition succeeds when the sum fits in 64 bits. -/
+theorem u64_add_isOk (x y : UInt64) (h : x.toNat + y.toNat < 2 ^ 64) :
+    (x +? y).isOk = true := by
+  show (if BitVec.uaddOverflow x.toBitVec y.toBitVec
+        then RustM.fail Error.integerOverflow
+        else pure (x + y)).isOk = true
+  have hnov : BitVec.uaddOverflow x.toBitVec y.toBitVec = false := by
+    have hx : x.toBitVec.toNat = x.toNat := rfl
+    have hy : y.toBitVec.toNat = y.toNat := rfl
+    simp only [BitVec.uaddOverflow, hx, hy, decide_eq_false_iff_not, ge_iff_le]
+    omega
+  simp [hnov]
+
+/-- `u64` multiplication succeeds when the product fits in 64 bits. -/
+theorem u64_mul_isOk (x y : UInt64) (h : x.toNat * y.toNat < 2 ^ 64) :
+    (x *? y).isOk = true := by
+  show (if BitVec.umulOverflow x.toBitVec y.toBitVec
+        then RustM.fail Error.integerOverflow
+        else pure (x * y)).isOk = true
+  have hnov : BitVec.umulOverflow x.toBitVec y.toBitVec = false := by
+    have hx : x.toBitVec.toNat = x.toNat := rfl
+    have hy : y.toBitVec.toNat = y.toNat := rfl
+    simp only [BitVec.umulOverflow, hx, hy, decide_eq_false_iff_not, ge_iff_le]
+    omega
+  simp [hnov]
+
+/-- `u64` subtraction succeeds when `y ≤ x` (no underflow). -/
+theorem u64_sub_isOk (x y : UInt64) (h : y.toNat ≤ x.toNat) :
+    (x -? y).isOk = true := by
+  show (if BitVec.usubOverflow x.toBitVec y.toBitVec
+        then RustM.fail Error.integerOverflow
+        else pure (x - y)).isOk = true
+  have hnov : BitVec.usubOverflow x.toBitVec y.toBitVec = false := by
+    have hx : x.toBitVec.toNat = x.toNat := rfl
+    have hy : y.toBitVec.toNat = y.toNat := rfl
+    simp only [BitVec.usubOverflow, hx, hy, decide_eq_false_iff_not]
+    omega
+  simp [hnov]
+
+/-- `u128` addition is unconditionally `IsOk` due to the forwarding instance
+    that resolves the typeclass to `pure (x + y)`. The hypothesis is retained
+    for forward compatibility with the named `instAddU128`. -/
+theorem u128_add_isOk (x y : u128) (_h : x.toNat + y.toNat < 2 ^ 128) :
+    (x +? y).isOk = true := rfl
+
+/-- `u128` multiplication succeeds when the product fits in 128 bits. -/
+theorem u128_mul_isOk (x y : u128) (h : x.toNat * y.toNat < 2 ^ 128) :
+    (x *? y).isOk = true := by
+  show (if BitVec.umulOverflow x y then RustM.fail Error.integerOverflow
+        else pure (x * y)).isOk = true
+  have hnov : BitVec.umulOverflow x y = false := by
+    simp only [BitVec.umulOverflow, decide_eq_false_iff_not, ge_iff_le]
+    omega
+  simp [hnov]
+
+/-- `u128` subtraction succeeds when `y ≤ x`. -/
+theorem u128_sub_isOk (x y : u128) (h : y.toNat ≤ x.toNat) :
+    (x -? y).isOk = true := by
+  show (if BitVec.usubOverflow x y then RustM.fail Error.integerOverflow
+        else pure (x - y)).isOk = true
+  have hnov : BitVec.usubOverflow x y = false := by
+    simp only [BitVec.usubOverflow, decide_eq_false_iff_not]
+    omega
+  simp [hnov]
+
+/-- u64 right-shift by a literal `(51 : i32)` always succeeds (literal in 0..64). -/
+theorem u64_shr_51_isOk (x : UInt64) :
+    ((x >>>? (51 : Int32) : RustM UInt64)).isOk = true := rfl
+
+/-- u128 right-shift by a literal `(51 : i32)` always succeeds (literal in 0..128). -/
+theorem u128_shr_51_isOk (x : u128) :
+    ((x >>>? (51 : Int32) : RustM u128)).isOk = true := rfl
+
+/-- u128 right-shift by a literal `(64 : i32)` always succeeds. -/
+theorem u128_shr_64_isOk (x : u128) :
+    ((x >>>? (64 : Int32) : RustM u128)).isOk = true := rfl
+
+/-- u128 right-shift by a literal `(127 : i32)` always succeeds. -/
+theorem u128_shr_127_isOk (x : u128) :
+    ((x >>>? (127 : Int32) : RustM u128)).isOk = true := rfl
 
 end LibcruxSpecs.PanicFree

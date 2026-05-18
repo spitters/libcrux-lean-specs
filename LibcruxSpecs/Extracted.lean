@@ -253,7 +253,9 @@ def compress (block : (RustArray u8 64)) (h_in : (RustArray u32 8)) :
 def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
   let h : (RustArray u32 8) := HASH_INIT;
   let msg_len : usize ← (Core_models.Slice.Impl.len u8 msg);
-  let bit_len : u64 ← ((← (Rust_primitives.Hax.cast_op (β := u64) msg_len)) *? (8 : u64));
+  let bit_len : u64 ←
+    (Rust_primitives.Hax.cast_op (β := u64)
+      (← ((← (Rust_primitives.Hax.cast_op (β := u128) msg_len)) *? (8 : u128))));
   let num_full_blocks : usize ← (msg_len /? (64 : usize));
   let h : (RustArray u32 8) ←
     (Rust_primitives.Hax.Folds.fold_range
@@ -5079,12 +5081,15 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
           usize
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let aad_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op (β := u64) (← (Core_models.Slice.Impl.len u8 aad))))
-      *? (8 : u64));
+    (Rust_primitives.Hax.cast_op (β := u64)
+      (← ((← (Rust_primitives.Hax.cast_op (β := u128)
+            (← (Core_models.Slice.Impl.len u8 aad))))
+        *? (8 : u128))));
   let ct_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op (β := u64)
-        (← (Core_models.Slice.Impl.len u8 ciphertext))))
-      *? (8 : u64));
+    (Rust_primitives.Hax.cast_op (β := u64)
+      (← ((← (Rust_primitives.Hax.cast_op (β := u128)
+            (← (Core_models.Slice.Impl.len u8 ciphertext))))
+        *? (8 : u128))));
   let aad_len_bytes : (RustArray u8 8) ←
     (Libcrux_specs.Num.Impl_9.to_be_bytes aad_bits);
   let ct_len_bytes : (RustArray u8 8) ←
