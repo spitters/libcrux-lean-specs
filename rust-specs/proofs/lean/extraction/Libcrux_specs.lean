@@ -247,7 +247,9 @@ def compress (block : (RustArray u8 64)) (h_in : (RustArray u32 8)) :
 def sha256 (msg : (RustSlice u8)) : RustM (RustArray u8 32) := do
   let h : (RustArray u32 8) := HASH_INIT;
   let msg_len : usize ← (Core_models.Slice.Impl.len u8 msg);
-  let bit_len : u64 ← ((← (Rust_primitives.Hax.cast_op msg_len)) *? (8 : u64));
+  let bit_len : u64 ←
+    (Rust_primitives.Hax.cast_op
+      (← ((← (Rust_primitives.Hax.cast_op msg_len)) *? (8 : u128))));
   let num_full_blocks : usize ← (msg_len /? (64 : usize));
   let h : (RustArray u32 8) ←
     (Rust_primitives.Hax.Folds.fold_range
@@ -4959,6 +4961,475 @@ def aes256_encrypt (key : (RustArray u8 32)) (plaintext : (RustArray u8 16)) :
     (← (Rust_primitives.unsize round_keys))
     (14 : usize))
 
+--  AES inverse S-box (FIPS 197, Section 5.1.1, Figure 14).
+def INV_SBOX : (RustArray u8 256) :=
+  RustM.of_isOk
+    (do
+    #v[(82 : u8),
+         (9 : u8),
+         (106 : u8),
+         (213 : u8),
+         (48 : u8),
+         (54 : u8),
+         (165 : u8),
+         (56 : u8),
+         (191 : u8),
+         (64 : u8),
+         (163 : u8),
+         (158 : u8),
+         (129 : u8),
+         (243 : u8),
+         (215 : u8),
+         (251 : u8),
+         (124 : u8),
+         (227 : u8),
+         (57 : u8),
+         (130 : u8),
+         (155 : u8),
+         (47 : u8),
+         (255 : u8),
+         (135 : u8),
+         (52 : u8),
+         (142 : u8),
+         (67 : u8),
+         (68 : u8),
+         (196 : u8),
+         (222 : u8),
+         (233 : u8),
+         (203 : u8),
+         (84 : u8),
+         (123 : u8),
+         (148 : u8),
+         (50 : u8),
+         (166 : u8),
+         (194 : u8),
+         (35 : u8),
+         (61 : u8),
+         (238 : u8),
+         (76 : u8),
+         (149 : u8),
+         (11 : u8),
+         (66 : u8),
+         (250 : u8),
+         (195 : u8),
+         (78 : u8),
+         (8 : u8),
+         (46 : u8),
+         (161 : u8),
+         (102 : u8),
+         (40 : u8),
+         (217 : u8),
+         (36 : u8),
+         (178 : u8),
+         (118 : u8),
+         (91 : u8),
+         (162 : u8),
+         (73 : u8),
+         (109 : u8),
+         (139 : u8),
+         (209 : u8),
+         (37 : u8),
+         (114 : u8),
+         (248 : u8),
+         (246 : u8),
+         (100 : u8),
+         (134 : u8),
+         (104 : u8),
+         (152 : u8),
+         (22 : u8),
+         (212 : u8),
+         (164 : u8),
+         (92 : u8),
+         (204 : u8),
+         (93 : u8),
+         (101 : u8),
+         (182 : u8),
+         (146 : u8),
+         (108 : u8),
+         (112 : u8),
+         (72 : u8),
+         (80 : u8),
+         (253 : u8),
+         (237 : u8),
+         (185 : u8),
+         (218 : u8),
+         (94 : u8),
+         (21 : u8),
+         (70 : u8),
+         (87 : u8),
+         (167 : u8),
+         (141 : u8),
+         (157 : u8),
+         (132 : u8),
+         (144 : u8),
+         (216 : u8),
+         (171 : u8),
+         (0 : u8),
+         (140 : u8),
+         (188 : u8),
+         (211 : u8),
+         (10 : u8),
+         (247 : u8),
+         (228 : u8),
+         (88 : u8),
+         (5 : u8),
+         (184 : u8),
+         (179 : u8),
+         (69 : u8),
+         (6 : u8),
+         (208 : u8),
+         (44 : u8),
+         (30 : u8),
+         (143 : u8),
+         (202 : u8),
+         (63 : u8),
+         (15 : u8),
+         (2 : u8),
+         (193 : u8),
+         (175 : u8),
+         (189 : u8),
+         (3 : u8),
+         (1 : u8),
+         (19 : u8),
+         (138 : u8),
+         (107 : u8),
+         (58 : u8),
+         (145 : u8),
+         (17 : u8),
+         (65 : u8),
+         (79 : u8),
+         (103 : u8),
+         (220 : u8),
+         (234 : u8),
+         (151 : u8),
+         (242 : u8),
+         (207 : u8),
+         (206 : u8),
+         (240 : u8),
+         (180 : u8),
+         (230 : u8),
+         (115 : u8),
+         (150 : u8),
+         (172 : u8),
+         (116 : u8),
+         (34 : u8),
+         (231 : u8),
+         (173 : u8),
+         (53 : u8),
+         (133 : u8),
+         (226 : u8),
+         (249 : u8),
+         (55 : u8),
+         (232 : u8),
+         (28 : u8),
+         (117 : u8),
+         (223 : u8),
+         (110 : u8),
+         (71 : u8),
+         (241 : u8),
+         (26 : u8),
+         (113 : u8),
+         (29 : u8),
+         (41 : u8),
+         (197 : u8),
+         (137 : u8),
+         (111 : u8),
+         (183 : u8),
+         (98 : u8),
+         (14 : u8),
+         (170 : u8),
+         (24 : u8),
+         (190 : u8),
+         (27 : u8),
+         (252 : u8),
+         (86 : u8),
+         (62 : u8),
+         (75 : u8),
+         (198 : u8),
+         (210 : u8),
+         (121 : u8),
+         (32 : u8),
+         (154 : u8),
+         (219 : u8),
+         (192 : u8),
+         (254 : u8),
+         (120 : u8),
+         (205 : u8),
+         (90 : u8),
+         (244 : u8),
+         (31 : u8),
+         (221 : u8),
+         (168 : u8),
+         (51 : u8),
+         (136 : u8),
+         (7 : u8),
+         (199 : u8),
+         (49 : u8),
+         (177 : u8),
+         (18 : u8),
+         (16 : u8),
+         (89 : u8),
+         (39 : u8),
+         (128 : u8),
+         (236 : u8),
+         (95 : u8),
+         (96 : u8),
+         (81 : u8),
+         (127 : u8),
+         (169 : u8),
+         (25 : u8),
+         (181 : u8),
+         (74 : u8),
+         (13 : u8),
+         (45 : u8),
+         (229 : u8),
+         (122 : u8),
+         (159 : u8),
+         (147 : u8),
+         (201 : u8),
+         (156 : u8),
+         (239 : u8),
+         (160 : u8),
+         (224 : u8),
+         (59 : u8),
+         (77 : u8),
+         (174 : u8),
+         (42 : u8),
+         (245 : u8),
+         (176 : u8),
+         (200 : u8),
+         (235 : u8),
+         (187 : u8),
+         (60 : u8),
+         (131 : u8),
+         (83 : u8),
+         (153 : u8),
+         (97 : u8),
+         (23 : u8),
+         (43 : u8),
+         (4 : u8),
+         (126 : u8),
+         (186 : u8),
+         (119 : u8),
+         (214 : u8),
+         (38 : u8),
+         (225 : u8),
+         (105 : u8),
+         (20 : u8),
+         (99 : u8),
+         (85 : u8),
+         (33 : u8),
+         (12 : u8),
+         (125 : u8)])
+    (by rfl)
+
+--  AES InvSubBytes: apply inverse S-box to each byte of state.
+def inv_sub_bytes (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
+  let result : (RustArray u8 16) ←
+    (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
+  let i : usize := (0 : usize);
+  let ⟨i, result⟩ ←
+    (Rust_primitives.Hax.while_loop
+      (fun ⟨i, result⟩ => (do (pure true) : RustM Bool))
+      (fun ⟨i, result⟩ =>
+        (do (Rust_primitives.Hax.Machine_int.lt i (16 : usize)) : RustM Bool))
+      (fun ⟨i, result⟩ =>
+        (do
+        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+        RustM Hax_lib.Int.Int))
+      (Rust_primitives.Hax.Tuple2.mk i result)
+      (fun ⟨i, result⟩ =>
+        (do
+        let result : (RustArray u8 16) ←
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+            result
+            i
+            (← INV_SBOX[(← (Rust_primitives.Hax.cast_op (← state[i]_?)))]_?));
+        let i : usize ← (i +? (1 : usize));
+        (pure (Rust_primitives.Hax.Tuple2.mk i result)) :
+        RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
+  (pure result)
+
+--  AES InvShiftRows (FIPS 197, Section 5.3.1).
+--  State is column-major: state[row + 4*col].
+--  Row `r` is right-shifted by `r` positions (inverse of ShiftRows).
+def inv_shift_rows (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
+  let result : (RustArray u8 16) ←
+    (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
+  let col : usize := (0 : usize);
+  let ⟨col, result⟩ ←
+    (Rust_primitives.Hax.while_loop
+      (fun ⟨col, result⟩ => (do (pure true) : RustM Bool))
+      (fun ⟨col, result⟩ =>
+        (do (Rust_primitives.Hax.Machine_int.lt col (4 : usize)) : RustM Bool))
+      (fun ⟨col, result⟩ =>
+        (do
+        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+        RustM Hax_lib.Int.Int))
+      (Rust_primitives.Hax.Tuple2.mk col result)
+      (fun ⟨col, result⟩ =>
+        (do
+        let row : usize := (0 : usize);
+        let ⟨result, row⟩ ←
+          (Rust_primitives.Hax.while_loop
+            (fun ⟨result, row⟩ => (do (pure true) : RustM Bool))
+            (fun ⟨result, row⟩ =>
+              (do
+              (Rust_primitives.Hax.Machine_int.lt row (4 : usize)) :
+              RustM Bool))
+            (fun ⟨result, row⟩ =>
+              (do
+              (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+              RustM Hax_lib.Int.Int))
+            (Rust_primitives.Hax.Tuple2.mk result row)
+            (fun ⟨result, row⟩ =>
+              (do
+              let result : (RustArray u8 16) ←
+                (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+                  result
+                  (← (row +? (← ((4 : usize) *? col))))
+                  (← state[
+                    (← (row
+                      +? (← ((4 : usize)
+                        *? (← ((← ((← (col +? (4 : usize))) -? row))
+                          %? (4 : usize)))))))
+                    ]_?));
+              let row : usize ← (row +? (1 : usize));
+              (pure (Rust_primitives.Hax.Tuple2.mk result row)) :
+              RustM (Rust_primitives.Hax.Tuple2 (RustArray u8 16) usize))));
+        let col : usize ← (col +? (1 : usize));
+        (pure (Rust_primitives.Hax.Tuple2.mk col result)) :
+        RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
+  (pure result)
+
+--  Multiply by 9 in GF(2^8): 9*x = (((2*x)*2)*2) XOR x.
+def gf_mul9 (x : u8) : RustM u8 := do
+  ((← (gf_mul2 (← (gf_mul2 (← (gf_mul2 x)))))) ^^^? x)
+
+--  Multiply by 11 in GF(2^8): 11*x = ((2*x)*2 XOR x)*2 XOR x = 8x XOR 2x XOR x.
+def gf_mul11 (x : u8) : RustM u8 := do
+  ((← (gf_mul2 (← ((← (gf_mul2 (← (gf_mul2 x)))) ^^^? x)))) ^^^? x)
+
+--  Multiply by 13 in GF(2^8): 13*x = ((2*x XOR x)*2)*2 XOR x = 8x XOR 4x XOR x.
+def gf_mul13 (x : u8) : RustM u8 := do
+  ((← (gf_mul2 (← (gf_mul2 (← ((← (gf_mul2 x)) ^^^? x)))))) ^^^? x)
+
+--  Multiply by 14 in GF(2^8): 14*x = ((2*x XOR x)*2 XOR x)*2 = 8x XOR 4x XOR 2x.
+def gf_mul14 (x : u8) : RustM u8 := do
+  (gf_mul2 (← ((← (gf_mul2 (← ((← (gf_mul2 x)) ^^^? x)))) ^^^? x)))
+
+--  AES InvMixColumns (FIPS 197, Section 5.3.3).
+--  Inverse polynomial: a^-1(x) = {0b}x^3 + {0d}x^2 + {09}x + {0e}.
+def inv_mix_columns (state : (RustArray u8 16)) : RustM (RustArray u8 16) := do
+  let result : (RustArray u8 16) ←
+    (Rust_primitives.Hax.repeat (0 : u8) (16 : usize));
+  let col : usize := (0 : usize);
+  let ⟨col, result⟩ ←
+    (Rust_primitives.Hax.while_loop
+      (fun ⟨col, result⟩ => (do (pure true) : RustM Bool))
+      (fun ⟨col, result⟩ =>
+        (do (Rust_primitives.Hax.Machine_int.lt col (4 : usize)) : RustM Bool))
+      (fun ⟨col, result⟩ =>
+        (do
+        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+        RustM Hax_lib.Int.Int))
+      (Rust_primitives.Hax.Tuple2.mk col result)
+      (fun ⟨col, result⟩ =>
+        (do
+        let s0 : u8 ← state[(← ((4 : usize) *? col))]_?;
+        let s1 : u8 ← state[(← ((← ((4 : usize) *? col)) +? (1 : usize)))]_?;
+        let s2 : u8 ← state[(← ((← ((4 : usize) *? col)) +? (2 : usize)))]_?;
+        let s3 : u8 ← state[(← ((← ((4 : usize) *? col)) +? (3 : usize)))]_?;
+        let result : (RustArray u8 16) ←
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+            result
+            (← ((4 : usize) *? col))
+            (← ((← ((← ((← (gf_mul14 s0)) ^^^? (← (gf_mul11 s1))))
+                ^^^? (← (gf_mul13 s2))))
+              ^^^? (← (gf_mul9 s3)))));
+        let result : (RustArray u8 16) ←
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+            result
+            (← ((← ((4 : usize) *? col)) +? (1 : usize)))
+            (← ((← ((← ((← (gf_mul9 s0)) ^^^? (← (gf_mul14 s1))))
+                ^^^? (← (gf_mul11 s2))))
+              ^^^? (← (gf_mul13 s3)))));
+        let result : (RustArray u8 16) ←
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+            result
+            (← ((← ((4 : usize) *? col)) +? (2 : usize)))
+            (← ((← ((← ((← (gf_mul13 s0)) ^^^? (← (gf_mul9 s1))))
+                ^^^? (← (gf_mul14 s2))))
+              ^^^? (← (gf_mul11 s3)))));
+        let result : (RustArray u8 16) ←
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+            result
+            (← ((← ((4 : usize) *? col)) +? (3 : usize)))
+            (← ((← ((← ((← (gf_mul11 s0)) ^^^? (← (gf_mul13 s1))))
+                ^^^? (← (gf_mul9 s2))))
+              ^^^? (← (gf_mul14 s3)))));
+        let col : usize ← (col +? (1 : usize));
+        (pure (Rust_primitives.Hax.Tuple2.mk col result)) :
+        RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
+  (pure result)
+
+--  Generic AES decryption core: applies num_rounds of inverse AES.
+-- 
+--  round_keys must have length num_rounds + 1, in the SAME order as for
+--  encryption (the inverse cipher walks them backward).
+def aes_decrypt_rounds
+    (ciphertext : (RustArray u8 16))
+    (round_keys : (RustSlice (RustArray u8 16)))
+    (num_rounds : usize) :
+    RustM (RustArray u8 16) := do
+  let state : (RustArray u8 16) ←
+    (add_round_key ciphertext (← round_keys[num_rounds]_?));
+  let round : usize ← (num_rounds -? (1 : usize));
+  let ⟨round, state⟩ ←
+    (Rust_primitives.Hax.while_loop
+      (fun ⟨round, state⟩ => (do (pure true) : RustM Bool))
+      (fun ⟨round, state⟩ =>
+        (do
+        (Rust_primitives.Hax.Machine_int.ge round (1 : usize)) : RustM Bool))
+      (fun ⟨round, state⟩ =>
+        (do
+        (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+        RustM Hax_lib.Int.Int))
+      (Rust_primitives.Hax.Tuple2.mk round state)
+      (fun ⟨round, state⟩ =>
+        (do
+        let state : (RustArray u8 16) ← (inv_shift_rows state);
+        let state : (RustArray u8 16) ← (inv_sub_bytes state);
+        let state : (RustArray u8 16) ←
+          (add_round_key state (← round_keys[round]_?));
+        let state : (RustArray u8 16) ← (inv_mix_columns state);
+        let round : usize ← (round -? (1 : usize));
+        (pure (Rust_primitives.Hax.Tuple2.mk round state)) :
+        RustM (Rust_primitives.Hax.Tuple2 usize (RustArray u8 16)))));
+  let state : (RustArray u8 16) ← (inv_shift_rows state);
+  let state : (RustArray u8 16) ← (inv_sub_bytes state);
+  let state : (RustArray u8 16) ←
+    (add_round_key state (← round_keys[(0 : usize)]_?));
+  (pure state)
+
+--  AES-128 single-block decryption (FIPS 197 §5.3).
+def aes128_decrypt (key : (RustArray u8 16)) (ciphertext : (RustArray u8 16)) :
+    RustM (RustArray u8 16) := do
+  let round_keys : (RustArray (RustArray u8 16) 11) ← (aes128_key_expand key);
+  (aes_decrypt_rounds
+    ciphertext
+    (← (Rust_primitives.unsize round_keys))
+    (10 : usize))
+
+--  AES-256 single-block decryption (FIPS 197 §5.3).
+def aes256_decrypt (key : (RustArray u8 32)) (ciphertext : (RustArray u8 16)) :
+    RustM (RustArray u8 16) := do
+  let round_keys : (RustArray (RustArray u8 16) 15) ← (aes256_key_expand key);
+  (aes_decrypt_rounds
+    ciphertext
+    (← (Rust_primitives.unsize round_keys))
+    (14 : usize))
+
 end Libcrux_specs.Aes
 
 
@@ -5324,12 +5795,15 @@ def build_ghash_input (aad : (RustSlice u8)) (ciphertext : (RustSlice u8)) :
           usize
           (Alloc.Vec.Vec u8 Alloc.Alloc.Global)))));
   let aad_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op (← (Core_models.Slice.Impl.len u8 aad))))
-      *? (8 : u64));
+    (Rust_primitives.Hax.cast_op
+      (← ((← (Rust_primitives.Hax.cast_op
+          (← (Core_models.Slice.Impl.len u8 aad))))
+        *? (8 : u128))));
   let ct_bits : u64 ←
-    ((← (Rust_primitives.Hax.cast_op
-        (← (Core_models.Slice.Impl.len u8 ciphertext))))
-      *? (8 : u64));
+    (Rust_primitives.Hax.cast_op
+      (← ((← (Rust_primitives.Hax.cast_op
+          (← (Core_models.Slice.Impl.len u8 ciphertext))))
+        *? (8 : u128))));
   let aad_len_bytes : (RustArray u8 8) ←
     (Core_models.Num.Impl_9.to_be_bytes aad_bits);
   let ct_len_bytes : (RustArray u8 8) ←

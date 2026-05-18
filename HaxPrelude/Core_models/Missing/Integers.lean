@@ -260,13 +260,16 @@ macro "declare_u128_shift_instances" : command => do
     instance : Core_models.Ops.Bit.Shl.AssociatedTypes u128 u128 where
       Output := u128
 
-    instance : Core_models.Ops.Bit.Shr u128 u128 where
+    -- Named for the same reason as the u128 arithmetic instances
+    -- above: downstream panic-freedom proofs need to `unfold` to
+    -- expose the if-then-else.
+    instance instShrU128U128 : Core_models.Ops.Bit.Shr u128 u128 where
       shr x y :=
         if y.toNat < 128
         then pure (x >>> y.toNat)
         else .fail .integerOverflow
 
-    instance : Core_models.Ops.Bit.Shl u128 u128 where
+    instance instShlU128U128 : Core_models.Ops.Bit.Shl u128 u128 where
       shl x y :=
         if y.toNat < 128
         then pure (x <<< y.toNat)
