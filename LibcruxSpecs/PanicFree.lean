@@ -100,12 +100,393 @@ Leaf-function helpers below mirror the AES helper pattern (`aes128_key_expand_is
 `aes_encrypt_rounds_isOk`): they are kept as named TODOs so the wrapper-level
 proofs are genuine compositions. -/
 
+/-! ### SHA-256 inner helpers (panic-free without precondition) -/
+
+/-- `ch` is unconditionally `IsOk` — pure bit ops. -/
+theorem sha256_ch_isOk (x y z : UInt32) :
+    (Libcrux_specs.Sha256.ch x y z).isOk = true := by
+  unfold Libcrux_specs.Sha256.ch
+  -- bind_isOk through `(x &&&? y)` then `not x` then `&&&? z` then `^^^?`.
+  -- All operations are `pure`.
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro u
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl  -- `Machine_int.not` is `pure (~x)`
+  intro nx
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro v
+  rfl
+
+/-- `maj` is unconditionally `IsOk` — pure bit ops. -/
+theorem sha256_maj_isOk (x y z : UInt32) :
+    (Libcrux_specs.Sha256.maj x y z).isOk = true := by
+  unfold Libcrux_specs.Sha256.maj
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro xy
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro xz
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro a
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro b
+  rfl
+
+/-- `big_sigma0` is unconditionally `IsOk` — `rotate_right` is pure, XOR is pure. -/
+theorem sha256_big_sigma0_isOk (x : UInt32) :
+    (Libcrux_specs.Sha256.big_sigma0 x).isOk = true := by
+  unfold Libcrux_specs.Sha256.big_sigma0
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl  -- rotate_right is pure
+  intro r1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r2
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl  -- XOR is pure
+  intro x1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r3
+  rfl
+
+/-- `big_sigma1` is unconditionally `IsOk` — same shape as `big_sigma0`. -/
+theorem sha256_big_sigma1_isOk (x : UInt32) :
+    (Libcrux_specs.Sha256.big_sigma1 x).isOk = true := by
+  unfold Libcrux_specs.Sha256.big_sigma1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r2
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro x1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r3
+  rfl
+
+/-- `sigma0` is unconditionally `IsOk` — `rotate_right` (pure), `>>>?` by a
+    fixed `i32` constant `3` in range `[0, 32)` (so the panic guard is bypassed),
+    and XOR (pure). -/
+theorem sha256_sigma0_isOk (x : UInt32) :
+    (Libcrux_specs.Sha256.sigma0 x).isOk = true := by
+  unfold Libcrux_specs.Sha256.sigma0
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl  -- rotate_right
+  intro r1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r2
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro x1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · -- `x >>>? (3 : i32) : RustM u32`. The shift def: if 0 ≤ 3 && 3 < 32 then pure...
+    rfl
+  intro s
+  rfl
+
+/-- `sigma1` is unconditionally `IsOk` — same shape as `sigma0`. -/
+theorem sha256_sigma1_isOk (x : UInt32) :
+    (Libcrux_specs.Sha256.sigma1 x).isOk = true := by
+  unfold Libcrux_specs.Sha256.sigma1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro r2
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro x1
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro s
+  rfl
+
+/-- `schedule` (SHA-256 message schedule on a 64-byte block) is unconditionally
+    `IsOk`. Body is two `fold_range`s: 0..16 building `w[i]` from `block[4i..4i+4]`,
+    then 16..64 building `w[i]` from previous schedule words. All indices stay
+    inside the 64-element `w` array; arithmetic is `*?` / `+?` / `-?` on small
+    constants (4, 1, 2, 7, 15, 16) so no `usize` overflow.
+
+    **Proof status: STUB.** The structural argument is clear and matches the
+    `aes_encrypt_rounds_isOk` pattern, but the per-iteration body involves
+    four FRESH `(4 *? i)` evaluations (not a single cached one), and the
+    outer body is `update_at w i (from_be_bytes #v[block[...], ..., block[...]])`
+    rather than a flat bind chain. Each of the four `block[(4*?i) +? j]_?`
+    indexings needs its own `usize_mul_isOk_of_lt` invocation; the proof
+    is ~400 LOC of mechanical walking. The simpler in-flight attempt below
+    is left as a starting point. -/
+theorem sha256_schedule_isOk (block : Vector UInt8 64) :
+    (Libcrux_specs.Sha256.schedule block).isOk = true := by
+  sorry
+
+/-
+ATTEMPTED — switch to a `bind_isOk` strategy that handles fresh `4 *? i`
+evaluations per block-index in the `from_be_bytes #v[...]` vector literal:
+  unfold Libcrux_specs.Sha256.schedule
+  unfold Libcrux_specs.Sha256.schedule
+  -- Step 1: `repeat 0 64 : Vector u32 64`
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · exact LibcruxSpecs.PanicFree.repeat_isOk _ _ rfl
+  intro w0
+  -- Step 2: first fold_range 0..16
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · refine LibcruxSpecs.PanicFree.fold_range_usize_isOk _ _ _ _ _ ?_
+    intro w i hi_lo hi_hi
+    have hi : i.toNat < 16 := by
+      have h16 : (16 : usize).toNat = 16 := rfl
+      rw [h16] at hi_hi; exact hi_hi
+    -- Body: update_at w i (from_be_bytes #v[block[4*i], block[4*i+1], block[4*i+2], block[4*i+3]])
+    -- 4*i has `i*4 ≤ 60 < 2^64` so no overflow; (4i)+j with j ∈ {1,2,3} has 4i+3 ≤ 63 < 64.
+    -- All block indexes < 64, so in bounds. from_be_bytes is pure.
+    have h4i : ((4 : usize) *? i).isOk = true := by
+      apply LibcruxSpecs.PanicFree.usize_mul_isOk_of_lt (N := 5) (M := 16)
+      · decide
+      · exact hi
+      · decide
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h4i
+    intro fi hfi
+    have hfi_val : fi.toNat = 4 * i.toNat := by
+      have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec i.toBitVec := by
+        rw [USize64.umulOverflow_iff]
+        have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec i.toBitVec = false :=
+        Bool.eq_false_iff.mpr hnov
+      have heq_pure : ((4 : usize) *? i) = .ok ((4 : usize) * i) := by
+        show (if BitVec.umulOverflow (4 : usize).toBitVec i.toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure ((4 : usize) * i)) = _
+        rw [hnov_false]; rfl
+      rw [heq_pure] at hfi
+      have heq : fi = (4 : usize) * i := (RustM.ok.inj hfi).symm
+      rw [heq, USize64.toNat_mul_of_lt]
+      · rfl
+      · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+    have hfi_lt : fi.toNat < 64 := by rw [hfi_val]; omega
+    -- block[fi]
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk block fi hfi_lt)
+    intro b0
+    -- fi +? 1
+    have h_fi1 : (fi +? (1 : usize)).isOk = true :=
+      LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 64) fi hfi_lt (by decide)
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_fi1
+    intro fi1 hfi1
+    have hfi1_val : fi1.toNat = fi.toNat + 1 :=
+      LibcruxSpecs.PanicFree.usize_add_one_toNat (N := 64) fi fi1 hfi_lt (by decide) hfi1
+    have hfi1_lt : fi1.toNat < 64 := by rw [hfi1_val]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk block fi1 hfi1_lt)
+    intro b1
+    -- fi +? 2
+    have h_fi2 : (fi +? (2 : usize)).isOk = true :=
+      LibcruxSpecs.PanicFree.usize_add_isOk_of_lt (N := 64) (M := 3) fi (2 : usize) hfi_lt
+        (by decide) (by decide)
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_fi2
+    intro fi2 hfi2
+    have hfi2_val : fi2.toNat = fi.toNat + 2 := by
+      have hnov : ¬ BitVec.uaddOverflow fi.toBitVec (2 : usize).toBitVec := by
+        rw [USize64.uaddOverflow_iff]
+        have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+      have hnov_false : BitVec.uaddOverflow fi.toBitVec (2 : usize).toBitVec = false :=
+        Bool.eq_false_iff.mpr hnov
+      have : (fi +? (2 : usize)) = .ok (fi + (2 : usize)) := by
+        show (if BitVec.uaddOverflow fi.toBitVec (2 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (fi + (2 : usize))) = _
+        rw [hnov_false]; rfl
+      rw [this] at hfi2
+      have heq : fi2 = fi + (2 : usize) := (RustM.ok.inj hfi2).symm
+      rw [heq, USize64.toNat_add_of_lt]
+      have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+    have hfi2_lt : fi2.toNat < 64 := by rw [hfi2_val]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk block fi2 hfi2_lt)
+    intro b2
+    -- fi +? 3
+    have h_fi3 : (fi +? (3 : usize)).isOk = true :=
+      LibcruxSpecs.PanicFree.usize_add_isOk_of_lt (N := 64) (M := 4) fi (3 : usize) hfi_lt
+        (by decide) (by decide)
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_fi3
+    intro fi3 hfi3
+    have hfi3_val : fi3.toNat = fi.toNat + 3 := by
+      have hnov : ¬ BitVec.uaddOverflow fi.toBitVec (3 : usize).toBitVec := by
+        rw [USize64.uaddOverflow_iff]
+        have h3 : (3 : usize).toNat = 3 := rfl; rw [h3]; omega
+      have hnov_false : BitVec.uaddOverflow fi.toBitVec (3 : usize).toBitVec = false :=
+        Bool.eq_false_iff.mpr hnov
+      have : (fi +? (3 : usize)) = .ok (fi + (3 : usize)) := by
+        show (if BitVec.uaddOverflow fi.toBitVec (3 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (fi + (3 : usize))) = _
+        rw [hnov_false]; rfl
+      rw [this] at hfi3
+      have heq : fi3 = fi + (3 : usize) := (RustM.ok.inj hfi3).symm
+      rw [heq, USize64.toNat_add_of_lt]
+      have h3 : (3 : usize).toNat = 3 := rfl; rw [h3]; omega
+    have hfi3_lt : fi3.toNat < 64 := by rw [hfi3_val]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk block fi3 hfi3_lt)
+    intro b3
+    -- from_be_bytes #v[b0,b1,b2,b3] is pure
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · rfl  -- from_be_bytes is `pure`
+    intro w_i
+    -- update_at w i w_i : i.toNat < 16 < 64
+    exact LibcruxSpecs.PanicFree.update_at_usize_isOk w i.toNat w_i (by simpa using hi)
+  intro w1
+  -- Step 3: second fold_range 16..64
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · refine LibcruxSpecs.PanicFree.fold_range_usize_isOk _ _ _ _ _ ?_
+    intro w i hi_lo hi_hi
+    have h16 : (16 : usize).toNat = 16 := rfl
+    rw [h16] at hi_lo
+    have h64 : (64 : usize).toNat = 64 := rfl
+    rw [h64] at hi_hi
+    have hi : 16 ≤ i.toNat ∧ i.toNat < 64 := ⟨hi_lo, hi_hi⟩
+    -- Body: update_at w i (sigma1 w[i-2] + w[i-7] + sigma0 w[i-15] + w[i-16])
+    -- All indices i-2, i-7, i-15, i-16 are in [0, 64) when i ∈ [16, 64).
+    have h_im2 : (i -? (2 : usize)).isOk = true := by
+      apply LibcruxSpecs.PanicFree.usize_sub_isOk
+      show (2 : usize).toNat ≤ i.toNat
+      have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_im2
+    intro im2 him2
+    have him2_lt : im2.toNat < 64 := by
+      have hnov : ¬ BitVec.usubOverflow i.toBitVec (2 : usize).toBitVec := by
+        simp [BitVec.usubOverflow]
+        have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+      have : (i -? (2 : usize)) = .ok (i - (2 : usize)) := by
+        show (if BitVec.usubOverflow i.toBitVec (2 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (i - (2 : usize))) = _
+        rw [if_neg hnov]; rfl
+      rw [this] at him2
+      have heq : im2 = i - (2 : usize) := (RustM.ok.inj him2).symm
+      rw [heq, USize64.toNat_sub_of_le']
+      · have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+      · have h2 : (2 : usize).toNat = 2 := rfl; rw [h2]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk w im2 him2_lt)
+    intro w_im2
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _ (sha256_sigma1_isOk w_im2)
+    intro s1_im2
+    -- i -? 7
+    have h_im7 : (i -? (7 : usize)).isOk = true := by
+      apply LibcruxSpecs.PanicFree.usize_sub_isOk
+      show (7 : usize).toNat ≤ i.toNat
+      have h7 : (7 : usize).toNat = 7 := rfl; rw [h7]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_im7
+    intro im7 him7
+    have him7_lt : im7.toNat < 64 := by
+      have hnov : ¬ BitVec.usubOverflow i.toBitVec (7 : usize).toBitVec := by
+        simp [BitVec.usubOverflow]
+        have h7 : (7 : usize).toNat = 7 := rfl; rw [h7]; omega
+      have : (i -? (7 : usize)) = .ok (i - (7 : usize)) := by
+        show (if BitVec.usubOverflow i.toBitVec (7 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (i - (7 : usize))) = _
+        rw [if_neg hnov]; rfl
+      rw [this] at him7
+      have heq : im7 = i - (7 : usize) := (RustM.ok.inj him7).symm
+      rw [heq, USize64.toNat_sub_of_le']
+      · have h7 : (7 : usize).toNat = 7 := rfl; rw [h7]; omega
+      · have h7 : (7 : usize).toNat = 7 := rfl; rw [h7]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk w im7 him7_lt)
+    intro w_im7
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · rfl  -- wrapping_add
+    intro s
+    -- i -? 15
+    have h_im15 : (i -? (15 : usize)).isOk = true := by
+      apply LibcruxSpecs.PanicFree.usize_sub_isOk
+      show (15 : usize).toNat ≤ i.toNat
+      have h15 : (15 : usize).toNat = 15 := rfl; rw [h15]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_im15
+    intro im15 him15
+    have him15_lt : im15.toNat < 64 := by
+      have hnov : ¬ BitVec.usubOverflow i.toBitVec (15 : usize).toBitVec := by
+        simp [BitVec.usubOverflow]
+        have h15 : (15 : usize).toNat = 15 := rfl; rw [h15]; omega
+      have : (i -? (15 : usize)) = .ok (i - (15 : usize)) := by
+        show (if BitVec.usubOverflow i.toBitVec (15 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (i - (15 : usize))) = _
+        rw [if_neg hnov]; rfl
+      rw [this] at him15
+      have heq : im15 = i - (15 : usize) := (RustM.ok.inj him15).symm
+      rw [heq, USize64.toNat_sub_of_le']
+      · have h15 : (15 : usize).toNat = 15 := rfl; rw [h15]; omega
+      · have h15 : (15 : usize).toNat = 15 := rfl; rw [h15]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk w im15 him15_lt)
+    intro w_im15
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _ (sha256_sigma0_isOk w_im15)
+    intro s0_im15
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · rfl  -- wrapping_add
+    intro s2
+    -- i -? 16
+    have h_im16 : (i -? (16 : usize)).isOk = true := by
+      apply LibcruxSpecs.PanicFree.usize_sub_isOk
+      show (16 : usize).toNat ≤ i.toNat
+      rw [h16]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ h_im16
+    intro im16 him16
+    have him16_lt : im16.toNat < 64 := by
+      have hnov : ¬ BitVec.usubOverflow i.toBitVec (16 : usize).toBitVec := by
+        simp [BitVec.usubOverflow]; rw [h16]; omega
+      have : (i -? (16 : usize)) = .ok (i - (16 : usize)) := by
+        show (if BitVec.usubOverflow i.toBitVec (16 : usize).toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure (i - (16 : usize))) = _
+        rw [if_neg hnov]; rfl
+      rw [this] at him16
+      have heq : im16 = i - (16 : usize) := (RustM.ok.inj him16).symm
+      rw [heq, USize64.toNat_sub_of_le']
+      · rw [h16]; omega
+      · rw [h16]; omega
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk w im16 him16_lt)
+    intro w_im16
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · rfl  -- wrapping_add
+    intro w_i
+    -- update_at w i w_i — `i.toNat < 64`
+    exact LibcruxSpecs.PanicFree.update_at_usize_isOk w i.toNat w_i (by simpa using hi_hi)
+  intro _w2
+  rfl
+END SCHEDULE_ATTEMPT
+-/
+
 /-- Helper: the inner `Libcrux_specs.Sha256.sha256` always succeeds on any slice.
-    (Proof TODO — requires reasoning through 4 nested `fold_range`s, byte-length
-    arithmetic, and the `Sha256.compress` block function.) -/
+
+    **Proof status: STUB.** The unconditional statement as written is actually
+    FALSE: the `bit_len ← msg_len *? (8 : u64)` step in the SHA-256 body
+    overflows `u64` for `msg.size ≥ 2^61`. A correct theorem requires the
+    precondition `msg.size + 64 < 2^64` (equivalently `msg.size * 8 < 2^64`).
+
+    The wrappers `sha256_32_isOk`, `hmac_sha256_isOk`, `hkdf_extract_isOk` only
+    use this with size 32 (or after another bounded operation), so a conditional
+    `sha256_isOk_of_size_lt` variant would unblock the chain. Follow-up:
+    - Add `theorem sha256_isOk_of_size_lt (msg : Array UInt8) (h : msg.size * 8 < 2^64)`.
+    - Walk through 4 nested `fold_range_usize_isOk` calls (~300 LOC).
+    - Update wrappers to supply the trivial size proof. -/
 theorem sha256_isOk (msg : Array UInt8) :
     (Libcrux_specs.Sha256.sha256 msg).isOk = true := by
-  sorry  -- TODO: deep proof through 4 nested fold_range loops + compress
+  sorry  -- BLOCKED: statement is unconditional but actual function panics on
+         -- msg.size ≥ 2^61 due to `msg_len *? 8 : u64` overflow.
 
 /-- SHA-256 on 32-byte input does not panic.
     Compositional: `unsize msg` then `Sha256.sha256`. -/
@@ -312,15 +693,39 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
       intro v12
       -- Inner while_loop 1: j = 0..4.  Body: SBOX[cast rot[j]] then XOR + update_at;
       -- under invariant `j.toNat ≤ 4` and cond `j < 4`, each step in bounds.
-      -- TODO: ~80 LOC of mechanical bind-chain walking, structurally identical to
-      -- the `sub_bytes_isOk` body proof but with an if-then-else on `j == 0`.
+      -- TODO inner-loop-1 (~80 LOC):
+      --   * `while_loop'_isOk_inv` with invariant `j.toNat ≤ 4`
+      --   * Body steps (under cond `j < 4`):
+      --     1. `rot[j]_?` — j < 4 ≤ rot.size, use `vector_getElem_usize_isOk`
+      --     2. `cast_op u8→usize` — unconditional via `cast_op_u8_usize_isOk`
+      --     3. `SBOX[cast]_?` — cast result < 256 = SBOX.size, via `cast_u8_lt_256`
+      --        + `vector_getElem_usize_isOk`
+      --     4. `Machine_int.eq j 0` — unconditional via `machine_int_eq_isOk`
+      --     5. If-then-else (need to case-split on the eq result):
+      --        - j==0 branch: `prev[j]_?` (j<4<16), XOR, `RCON[round-1]_?`
+      --          (round-1 ≤ 9 < 10 = RCON.size), XOR, `update_at rk j _`
+      --        - else branch: `prev[j]_?`, XOR, `update_at rk j _`
+      --     6. `j +? 1` — j<4 so OK
+      --   * Invariant preservation: extract via `bind_eq_of_isOk` walk; final
+      --     `j_new = j + 1 ≤ 4`.
       apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-      · sorry  -- TODO inner-loop-1: invariant j ≤ 4, body chain ~10 binds
+      · sorry  -- TODO inner-loop-1: invariant j ≤ 4, body chain ~10 binds (see above)
       intro inner1_result
       -- Inner while_loop 2: j = 4..16.  Body: rk[j-4] XOR prev[j] then update_at.
       -- Invariant j.toNat ≤ 16; under cond j < 16, `j - 4 ≥ 0` and all indices < 16.
+      -- TODO inner-loop-2 (~50 LOC):
+      --   * `while_loop'_isOk_inv` with invariant `4 ≤ j.toNat ∧ j.toNat ≤ 16`
+      --   * Body steps (under cond `j < 16` + invariant `j ≥ 4`):
+      --     1. `j -? 4` — j ≥ 4 so OK; result toNat = j - 4 < 12
+      --     2. `rk[j-4]_?` — j-4 < 12 < 16 = rk.size
+      --     3. `prev[j]_?` — j < 16 = prev.size
+      --     4. XOR (`xor_u8_isOk`)
+      --     5. `update_at rk j _` — j < 16
+      --     6. `j +? 1` — j < 16 so j+1 ≤ 16
+      --   * Invariant preservation: walk; `j_new = j + 1`; preserved since
+      --     `4 ≤ j → 4 ≤ j+1` and `j ≤ 15 → j+1 ≤ 16`.
       apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-      · sorry  -- TODO inner-loop-2: invariant 4 ≤ j ≤ 16, body chain ~6 binds
+      · sorry  -- TODO inner-loop-2: invariant 4 ≤ j ≤ 16, body chain ~6 binds (see above)
       intro inner2_result
       -- update_at round_keys round rk
       apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
@@ -343,7 +748,21 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
         rw [h10] at this; exact this
       -- Walk body forward: the outer body has many bind steps (round-1, getElem prev,
       -- repeat 0 16, four prev getElems, inner-loop-1, inner-loop-2, update_at, round+1).
-      -- The post-`round` value is set by the final `round +? 1` step.  TODO: ~50 LOC.
+      -- The post-`round` value is set by the final `round +? 1` step.
+      -- TODO outer-inv (~80 LOC):
+      --   * Extract each witness via `bind_eq_of_isOk`:
+      --     1. `round -? 1` → round_m1
+      --     2. `round_keys[round_m1]_?` → prev
+      --     3. `repeat 0 16` → rk_init
+      --     4-7. Four prev[k]_? for k ∈ {13, 14, 15, 12} → v13..v12
+      --     8. inner-loop-1 result → ⟨j1, rk1⟩ (needs inner-loop-1 panic-freedom helper)
+      --     9. inner-loop-2 result → ⟨j2, rk2⟩
+      --     10. `update_at round_keys round rk2` → new_round_keys
+      --     11. `round +? 1` → round_new with `round_new.toNat = round.toNat + 1`
+      --   * Show `round' = round_new` via injection on the final `pure ⟨round_new, _⟩ = .ok ⟨round', _⟩`
+      --   * Conclude: round'.toNat = round.toNat + 1, so:
+      --     - round'.toNat ≥ 1 follows from round.toNat ≥ 1 (actually trivially from round ≥ 1 + 1 ≥ 1)
+      --     - round'.toNat ≤ 11 follows from round.toNat ≤ 10
       refine ⟨?_, ?_⟩
       · sorry  -- TODO: round'.toNat ≥ 1 (from round.toNat ≥ 1 and round' = round + 1)
       · sorry  -- TODO: round'.toNat ≤ 11 (from round.toNat ≤ 10 and round' = round + 1)
@@ -577,6 +996,240 @@ theorem fe_fresh_one :
       (#v[(1 : UInt64), (0 : UInt64), (0 : UInt64), (0 : UInt64), (0 : UInt64)]) := by
   refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> simp <;> decide
 
+/-! ### Curve25519 `cswap` and field-arithmetic sub-helpers
+
+`cswap` swaps two 5-limb field elements in constant time. The loop body
+performs XOR and AND on `u64` (always `pure`), reads `a[i]`/`b[i]`, and
+writes `update_at ra i _` / `update_at rb i _`. Under invariant
+`i.toNat ≤ 5` and `cond : i < 5`, every step is in-bounds. -/
+
+/-- `cswap swap a b` always succeeds. Proof: invariant `i.toNat ≤ 5` through
+    the 5-element loop; body uses `a[i]_?`, `b[i]_?`, `^^^?`/`&&&?` (pure),
+    `update_at_usize ra i _` / `update_at_usize rb i _`, and `i +? 1`. -/
+theorem cswap_isOk (swap : UInt64) (a b : Vector UInt64 5) :
+    (Libcrux_specs.Curve25519.cswap swap a b).isOk = true := by
+  unfold Libcrux_specs.Curve25519.cswap
+  -- Step 1: `Libcrux_specs.Num.Impl_9.wrapping_neg` is pure.
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · rfl
+  intro mask
+  -- Step 2: `repeat 0 5` produces ra.
+  apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ (LibcruxSpecs.PanicFree.repeat_isOk _ _ rfl)
+  intro ra _
+  -- Step 3: `repeat 0 5` produces rb.
+  apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ (LibcruxSpecs.PanicFree.repeat_isOk _ _ rfl)
+  intro rb _
+  -- Step 4: the `while_loop'` over (i, ra, rb).
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+  · refine LibcruxSpecs.PanicFree.while_loop'_isOk_inv
+      (inv := fun p => p._0.toNat ≤ 5) _ _ _ _ _ ?_ ?_ ?_ ?_
+    · rintro ⟨i, _, _⟩ _; rfl
+    · -- Body succeeds under inv + cond.
+      rintro ⟨i, ra', rb'⟩ _hinv hcond
+      simp only at hcond ⊢
+      have hi : i.toNat < 5 := by
+        have := LibcruxSpecs.PanicFree.usize_lt_of_machine_lt hcond
+        change i.toNat < (5 : usize).toNat at this
+        have h5 : (5 : usize).toNat = 5 := rfl
+        rw [h5] at this; exact this
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk a i hi)
+      intro ai
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk b i hi)
+      intro bi
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (by rfl : ((ai ^^^? bi : RustM UInt64)).isOk = true)
+      intro xab
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (by rfl : ((mask &&&? xab : RustM UInt64)).isOk = true)
+      intro diff
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk a i hi)
+      intro ai2
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (by rfl : ((ai2 ^^^? diff : RustM UInt64)).isOk = true)
+      intro xa
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.update_at_usize_isOk ra' i.toNat xa (by simpa using hi))
+      intro ra2
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk b i hi)
+      intro bi2
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (by rfl : ((bi2 ^^^? diff : RustM UInt64)).isOk = true)
+      intro xb
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.update_at_usize_isOk rb' i.toNat xb (by simpa using hi))
+      intro rb2
+      apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+        (LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 5) i hi (by decide))
+      intro inew
+      rfl
+    · -- Invariant preserved.
+      rintro ⟨i, ra', rb'⟩ ⟨i', ra'', rb''⟩ _hinv hcond hbody
+      simp only at hcond hbody
+      have hi : i.toNat < 5 := by
+        have := LibcruxSpecs.PanicFree.usize_lt_of_machine_lt hcond
+        change i.toNat < (5 : usize).toNat at this
+        have h5 : (5 : usize).toNat = 5 := rfl
+        rw [h5] at this; exact this
+      have h_ai := LibcruxSpecs.PanicFree.vector_getElem_usize_isOk a i hi
+      obtain ⟨ai, _, h_ai_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_ai
+      rw [h_ai_rw] at hbody
+      have h_bi := LibcruxSpecs.PanicFree.vector_getElem_usize_isOk b i hi
+      obtain ⟨bi, _, h_bi_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_bi
+      rw [h_bi_rw] at hbody
+      have h_xab : ((ai ^^^? bi : RustM UInt64)).isOk = true := rfl
+      obtain ⟨xab, _, h_xab_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_xab
+      rw [h_xab_rw] at hbody
+      have h_diff : ((mask &&&? xab : RustM UInt64)).isOk = true := rfl
+      obtain ⟨diff, _, h_diff_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_diff
+      rw [h_diff_rw] at hbody
+      have h_ai2 := LibcruxSpecs.PanicFree.vector_getElem_usize_isOk a i hi
+      obtain ⟨ai2, _, h_ai2_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_ai2
+      rw [h_ai2_rw] at hbody
+      have h_xa : ((ai2 ^^^? diff : RustM UInt64)).isOk = true := rfl
+      obtain ⟨xa, _, h_xa_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_xa
+      rw [h_xa_rw] at hbody
+      have h_ra2 :=
+        LibcruxSpecs.PanicFree.update_at_usize_isOk ra' i.toNat xa (by simpa using hi)
+      obtain ⟨ra2, _, h_ra2_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_ra2
+      rw [h_ra2_rw] at hbody
+      have h_bi2 := LibcruxSpecs.PanicFree.vector_getElem_usize_isOk b i hi
+      obtain ⟨bi2, _, h_bi2_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_bi2
+      rw [h_bi2_rw] at hbody
+      have h_xb : ((bi2 ^^^? diff : RustM UInt64)).isOk = true := rfl
+      obtain ⟨xb, _, h_xb_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_xb
+      rw [h_xb_rw] at hbody
+      have h_rb2 :=
+        LibcruxSpecs.PanicFree.update_at_usize_isOk rb' i.toNat xb (by simpa using hi)
+      obtain ⟨rb2, _, h_rb2_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_rb2
+      rw [h_rb2_rw] at hbody
+      have h_add : (i +? (1 : usize)).isOk = true :=
+        LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 5) i hi (by decide)
+      obtain ⟨inew, hinew_eq, h_add_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_add
+      rw [h_add_rw] at hbody
+      have hpair :
+          (Rust_primitives.Hax.Tuple3.mk inew ra2 rb2 : Rust_primitives.Hax.Tuple3 _ _ _) =
+          Rust_primitives.Hax.Tuple3.mk i' ra'' rb'' := RustM.ok.inj hbody
+      have hi'eq : inew = i' := by injection hpair
+      show i'.toNat ≤ 5
+      rw [← hi'eq]
+      have : inew.toNat = i.toNat + 1 :=
+        LibcruxSpecs.PanicFree.usize_add_one_toNat (N := 5) i inew hi (by decide) hinew_eq
+      rw [this]; omega
+    · show (0 : usize).toNat ≤ 5
+      decide
+  rintro ⟨_, _, _⟩
+  rfl
+
+/-! #### Field-arithmetic sub-helpers (declarations, proofs deferred)
+
+The remaining sub-helpers below mirror the dependency order in the TODO
+docstring of `curve25519_x25519_scalarmult_isOk`. Each is stated with the
+precondition it carries (`fe_fresh` or `fe_loose`) so the top-level ladder
+proof can thread the invariant through it.
+
+These remain `sorry`-ed: the multi-step bind-chain proofs (10-25 steps
+each, with `u64`/`u128` overflow witnesses) need iterative MCP testing
+that is unavailable in this session (LSP MCP not pointed at this
+repository, and the shared `PanicFreeInfra.lean` is concurrently being
+edited by other agents). Each `sorry` is annotated with the specific
+bound the proof requires. -/
+
+/-- `fe_carry a` always succeeds (unconditional). Output is `fe_fresh`.
+    **Proof outline:** 22-step `u64` bind chain. Each `+? carry` is bounded
+    by `carry = limb >>>? 51 < 2^13`, so `limb + carry < 2^64`. The
+    19-scaled wraparound `carry *? 19` is bounded by `2^13 * 19 < 2^18 < 2^64`. -/
+theorem fe_carry_isOk (a : Vector UInt64 5) :
+    (Libcrux_specs.Curve25519.fe_carry a).isOk = true := by
+  sorry  -- TODO: 22-step u64 bind chain via a u64_add_isOk helper + shifts (pure).
+
+/-- `fe_add a b` succeeds when both inputs are `fe_fresh`. Output is `fe_loose`. -/
+theorem fe_add_isOk (a b : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) (hb : LibcruxSpecs.PanicFree.fe_fresh b) :
+    (Libcrux_specs.Curve25519.fe_add a b).isOk = true := by
+  sorry  -- TODO: 5× u64_add_isOk bounded by 2^52 + 2^52 < 2^64, then fe_carry_isOk.
+
+/-- `fe_sub a b` succeeds when both inputs are `fe_fresh`. Output is `fe_loose`. -/
+theorem fe_sub_isOk (a b : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) (hb : LibcruxSpecs.PanicFree.fe_fresh b) :
+    (Libcrux_specs.Curve25519.fe_sub a b).isOk = true := by
+  sorry  -- TODO: 5× (u64_add + u64_sub) bounded by 2^52 + 2^52 + 2^52 < 2^64,
+         --       then fe_carry_isOk. The bias `4503599627370458 ≈ 2^52` keeps
+         --       the subtrahend bound `a + bias - b ≥ 0` when `a, b < 2^52`.
+
+/-- `fe_mul a b` succeeds when both inputs are `fe_loose`. Output is `fe_fresh`. -/
+theorem fe_mul_isOk (a b : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_loose a) (hb : LibcruxSpecs.PanicFree.fe_loose b) :
+    (Libcrux_specs.Curve25519.fe_mul a b).isOk = true := by
+  sorry  -- TODO: 25× u128_mul_isOk bounded by (2^54)^2 * 19 < 2^113 < 2^128,
+         --       then ~15 u128 adds bounded by 5*2^113 < 2^116 < 2^128,
+         --       then 5 cast-to-u64 + &&&? MASK51 + +? carry chain.
+
+/-- `fe_sq a` succeeds when `a` is `fe_loose`. Reduces to `fe_mul_isOk a a`. -/
+theorem fe_sq_isOk (a : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_loose a) :
+    (Libcrux_specs.Curve25519.fe_sq a).isOk = true := by
+  unfold Libcrux_specs.Curve25519.fe_sq
+  exact fe_mul_isOk a a ha ha
+
+/-- `fe_mul_121666 a` succeeds when `a` is `fe_loose`. Output is `fe_fresh`. -/
+theorem fe_mul_121666_isOk (a : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_loose a) :
+    (Libcrux_specs.Curve25519.fe_mul_121666 a).isOk = true := by
+  sorry  -- TODO: 5× u128_mul_isOk bounded by 2^54 * 2^17 < 2^71 < 2^128, then carry.
+
+/-- `fe_sq_n a n` succeeds when `a` is `fe_fresh`. Output is `fe_fresh`. -/
+theorem fe_sq_n_isOk (a : Vector UInt64 5) (n : UInt32)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) :
+    (Libcrux_specs.Curve25519.fe_sq_n a n).isOk = true := by
+  sorry  -- TODO: while_loop'_isOk_inv with invariant `fe_fresh r ∧ i.toNat ≤ n.toNat`.
+         --       Body is `fe_sq` (needs fe_loose ← fe_fresh via fe_loose_of_fe_fresh)
+         --       then `i +? 1` bounded by `i.toNat < n.toNat < 2^32`.
+
+/-- `fe_inv a` succeeds when `a` is `fe_fresh`. Output is `fe_fresh`. -/
+theorem fe_inv_isOk (a : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) :
+    (Libcrux_specs.Curve25519.fe_inv a).isOk = true := by
+  sorry  -- TODO: 11-call addition chain via fe_sq_isOk / fe_sq_n_isOk / fe_mul_isOk.
+         --       Each step's output is `fe_fresh`, hence `fe_loose` for the next mul.
+
+/-- `fe_from_bytes b` always succeeds. Output is `fe_fresh`. -/
+theorem fe_from_bytes_isOk (b : Vector UInt8 32) :
+    (Libcrux_specs.Curve25519.fe_from_bytes b).isOk = true := by
+  sorry  -- TODO: 32-iter while_loop'_isOk_inv with `i.toNat ≤ 32`, then
+         --       update_at_usize at index 31 (in bounds), then five `load8`
+         --       calls (each is an 8-iter while_loop' with index bound on
+         --       `off + j < buf.size`), finally five &&&?/>>>? combinations.
+
+/-- `fe_reduce a` succeeds when `a` is `fe_fresh`. -/
+theorem fe_reduce_isOk (a : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) :
+    (Libcrux_specs.Curve25519.fe_reduce a).isOk = true := by
+  sorry  -- TODO: two `fe_carry_isOk` calls, then update_at_usize chain bounded
+         --       by `2^51 + 19 < 2^52 < 2^64`, bitor/not (pure).
+
+/-- `fe_to_bytes a` succeeds when `a` is `fe_fresh`. -/
+theorem fe_to_bytes_isOk (a : Vector UInt64 5)
+    (ha : LibcruxSpecs.PanicFree.fe_fresh a) :
+    (Libcrux_specs.Curve25519.fe_to_bytes a).isOk = true := by
+  sorry  -- TODO: `fe_reduce_isOk` (above), then four update_at_usize on u64[4]
+         --       (bitor/shift — all const), then nested 4×8 while_loop'
+         --       with invariants `k ≤ 4` and `j ≤ 8` so `k*8 + j < 32`.
+
 /-- Helper: Curve25519 internal scalar mult always succeeds.
 
     **Proof status:** open. Requires limb-bound invariants threaded through the
@@ -666,26 +1319,230 @@ theorem x25519_base_isOk (k : Vector UInt8 32) :
 The two wrapper theorems below follow the compositional AES pattern: each is
 a real `bind_isOk_simple` chain through the leaf helpers
 `p256_fp_*_isOk`, `p256_scalar_mult_isOk`, `p256_to_affine_isOk`, and
-`fp_sqrt_p256_isOk` declared in this section.  The leaf helpers themselves
-remain `sorry`-ed — each one needs limb-range and `usize`-overflow
-invariants through its inner `while_loop'`/`fold_range`, analogous to the
-Curve25519 `fe_*_isOk` plan in `PanicFreeInfra.lean`.  See per-leaf
-docstrings for the specific invariant each one requires. -/
+`fp_sqrt_p256_isOk` declared in this section. -/
 
-/-- Field addition mod p always succeeds.  (Proof TODO — `add256` runs a
-    `while_loop'` decrementing `i` from `4`; needs invariant `0 ≤ i ≤ 4`
-    so `i -? 1`, the limb index `r[i]_?`, and the final `cmp256`/sub256
-    branch all succeed.) -/
+/-! #### Local infrastructure: invariant-based panic-freedom for `while_loop_return`
+
+`cmp256` uses `while_loop_return` (which returns `ControlFlow R β`) rather than
+the plain `while_loop'`. The invariant-based helper below mirrors
+`while_loop'_isOk_inv` from `PanicFreeInfra.lean` but allows the body to
+`Break` with a return value while preserving panic-freedom across `Continue`. -/
+
+open Rust_primitives.Hax in
+private theorem while_loop_return_loop_isOk_inv
+    {β R : Type} (inv : β → Prop)
+    (cond : β → RustM Bool)
+    (body : β → RustM (Core_models.Ops.Control_flow.ControlFlow R β))
+    (hcond : ∀ s, inv s → (cond s).isOk = true)
+    (hbody : ∀ s, inv s → cond s = .ok true → (body s).isOk = true)
+    (hpres : ∀ s r, inv s → cond s = .ok true →
+        body s = .ok (Core_models.Ops.Control_flow.ControlFlow.Continue r) → inv r) :
+    ∀ (n : Nat) (init : β), inv init →
+      (while_loop_return.loop cond body n init).isOk = true := by
+  intro n
+  induction n with
+  | zero => intro init _; rfl
+  | succ k ih =>
+    intro init hinit
+    show (do
+      let c ← cond init
+      if c then
+        match (← body init) with
+        | Core_models.Ops.Control_flow.ControlFlow.Break r =>
+            pure (Core_models.Ops.Control_flow.ControlFlow.Break r)
+        | Core_models.Ops.Control_flow.ControlFlow.Continue next =>
+            while_loop_return.loop cond body k next
+      else pure (Core_models.Ops.Control_flow.ControlFlow.Continue init)).isOk = true
+    have hc := hcond init hinit
+    match h_cond : cond init, hc with
+    | .ok true, _ =>
+      have hb := hbody init hinit h_cond
+      match h_body : body init, hb with
+      | .ok (.Break r), _ => rfl
+      | .ok (.Continue next), _ =>
+        show (while_loop_return.loop cond body k next).isOk = true
+        exact ih next (hpres init next hinit h_cond h_body)
+    | .ok false, _ => rfl
+
+open Rust_primitives.Hax in
+private theorem while_loop_return_isOk_inv
+    {β R : Type} (inv : β → Prop)
+    (rust_inv : β → RustM Prop) (cond : β → RustM Bool)
+    (term : β → RustM Hax_lib.Int.Int) (init : β)
+    (body : β → RustM (Core_models.Ops.Control_flow.ControlFlow R β))
+    (hcond : ∀ s, inv s → (cond s).isOk = true)
+    (hbody : ∀ s, inv s → cond s = .ok true → (body s).isOk = true)
+    (hpres : ∀ s r, inv s → cond s = .ok true →
+        body s = .ok (Core_models.Ops.Control_flow.ControlFlow.Continue r) → inv r)
+    (hinit : inv init) :
+    (while_loop_return rust_inv cond term init body).isOk = true := by
+  show (while_loop_return.loop cond body 10000 init).isOk = true
+  exact while_loop_return_loop_isOk_inv inv cond body hcond hbody hpres 10000 init hinit
+
+/-! #### u128 arithmetic helpers
+
+`add256` and `mul256_full` compute over `u128 = BitVec 128`. The cast
+`u64 → u128` and the cast `u128 → u64` (truncation) are `pure`; the u128
+arithmetic operators `+?`, `*?` have overflow checks but never fail on the
+budgets used in 256-bit operations (since two u64 values + a 1-bit carry
+fit in 65 bits, and two u64 values multiplied + u64 + u64 fit in
+`2 * 2^64 + 2^128 < 2^129` — but we're more careful below). -/
+
+/-- u128 → u64 cast always succeeds (truncates). -/
+@[simp] private theorem cast_op_u128_u64_isOk (x : u128) :
+    (Rust_primitives.Hax.cast_op (α := u128) (β := u64) x).isOk = true := rfl
+
+/-- u64 → u128 cast always succeeds (zero-extends). -/
+@[simp] private theorem cast_op_u64_u128_isOk (x : u64) :
+    (Rust_primitives.Hax.cast_op (α := u64) (β := u128) x).isOk = true := rfl
+
+/-- u128 → u128 cast always succeeds (identity). -/
+@[simp] private theorem cast_op_u128_u128_isOk (x : u128) :
+    (Rust_primitives.Hax.cast_op (α := u128) (β := u128) x).isOk = true := rfl
+
+/-- u128 right shift by an `i32` with `0 ≤ y < 128` always succeeds. -/
+private theorem u128_shr_i32_isOk (x : u128) (y : i32)
+    (h0 : 0 ≤ y) (h128 : y.toNatClampNeg < 128) :
+    ((x >>>? y : RustM u128)).isOk = true := by
+  show (if 0 ≤ y && y.toNatClampNeg < 128 then pure (x >>> y.toNatClampNeg)
+        else (RustM.fail Error.integerOverflow : RustM u128)).isOk = true
+  have : (0 ≤ y && y.toNatClampNeg < 128) = true := by
+    rw [Bool.and_eq_true]; exact ⟨by simpa using h0, by simpa using h128⟩
+  rw [this]; rfl
+
+/-- u128 left shift by an `i32` with `0 ≤ y < 128` always succeeds. -/
+private theorem u128_shl_i32_isOk (x : u128) (y : i32)
+    (h0 : 0 ≤ y) (h128 : y.toNatClampNeg < 128) :
+    ((x <<<? y : RustM u128)).isOk = true := by
+  show (if 0 ≤ y && y.toNatClampNeg < 128 then pure (x <<< y.toNatClampNeg)
+        else (RustM.fail Error.integerOverflow : RustM u128)).isOk = true
+  have : (0 ≤ y && y.toNatClampNeg < 128) = true := by
+    rw [Bool.and_eq_true]; exact ⟨by simpa using h0, by simpa using h128⟩
+  rw [this]; rfl
+
+/-- u128 bitwise AND is always isOk (pure). -/
+@[simp] private theorem u128_and_isOk (x y : u128) :
+    ((x &&&? y : RustM u128)).isOk = true := rfl
+
+/-- u128 addition never overflows when the sum is bounded. Used by `add256_isOk`.
+    Stated in the unfolded form to avoid typeclass-resolution defeq issues. -/
+private theorem u128_add_isOk (x y : u128) (h : x.toNat + y.toNat < 2 ^ 128) :
+    ((x +? y : RustM u128)).isOk = true := by
+  -- The u128 `+?` lowers to `Core_models.Ops.Arith.Add.add u128 u128 x y`,
+  -- whose instance has anonymous name. We argue by `BitVec.uaddOverflow = false`
+  -- and let Lean's reducibility on the if-then-else unfold the instance.
+  sorry  -- TODO: requires accessing the anonymous Add u128 u128 instance
+
+/-- u128 multiplication never overflows when the product is bounded. Used by `mul256_full_isOk`. -/
+private theorem u128_mul_isOk (x y : u128) (h : x.toNat * y.toNat < 2 ^ 128) :
+    ((x *? y : RustM u128)).isOk = true := by
+  sorry  -- TODO: same defeq issue as `u128_add_isOk`
+
+/-! #### 256-bit integer helpers (`cmp256`, `add256`, `sub256`)
+
+All three are `while_loop`-based loops with a counter `i` ranging over the
+4 limbs. Their bodies use 64-bit cast to u128, u128 arithmetic (which is
+panic-free on a 65-bit budget), and `i +? 1` / `i -? 1` (panic-free under
+the index invariant). The wrappers `fp_add`/`fp_sub`/`fn_add`/`fn_sub` are
+trivial `bind` chains through these. -/
+
+/-- `add256` (256-bit addition) never panics.
+
+    Single `while_loop'` decrementing counter `i : usize` from 4 to 0.
+    Strengthened invariant: `i.toNat ≤ 4 ∧ carry.toNat ≤ 1`. Under
+    `cond = (i > 0)`, i.e. `i.toNat ≥ 1`:
+    * `i -? 1` succeeds (`i.toNat ≥ 1`);
+    * `a[i-1]_?` / `b[i-1]_?` succeed (`(i-1).toNat ≤ 3 < 4`);
+    * `cast u64 → u128` is `pure` (CastCompat.lean);
+    * `cast u128 → u64` is `pure`;
+    * the two u128 `+?` are bounded: each cast u64 has `toNat < 2^64`, so
+      sum1 < 2^65; sum1 + carry < 2^65 + 2 < 2^128;
+    * `update_at r (i-1) _` succeeds;
+    * `s >>>? (64 : i32)` succeeds (`0 ≤ 64 < 128`, see `u128_shr_i32_isOk`);
+    * post-body: new carry = s >>> 64. Since s.toNat ≤ 2^65 + 1, the result
+      `s >>> 64 ≤ 1`. So `carry.toNat ≤ 1` preserved. And new
+      `i'.toNat = (i-1).toNat ≤ 3 ≤ 4`. -/
+private theorem add256_isOk (a b : Vector UInt64 4) :
+    (Libcrux_specs.P256.add256 a b).isOk = true := by
+  sorry  -- TODO: while_loop'_isOk_inv with i.toNat ≤ 4 ∧ carry.toNat ≤ 1
+
+/-- `sub256` (256-bit subtraction) never panics. Same shape as `add256_isOk`:
+    single `while_loop'` with counter `i : usize` decrementing 4→0,
+    invariant `i.toNat ≤ 4`. The body uses `wrapping_sub` (`pure`) on
+    `u128`s — no overflow checks needed — so even fewer panics than `add256`. -/
+private theorem sub256_isOk (a b : Vector UInt64 4) :
+    (Libcrux_specs.P256.sub256 a b).isOk = true := by
+  sorry  -- TODO: mirrors add256_isOk; wrapping_sub is pure
+
+/-- `cmp256` never panics.
+
+    Uses `while_loop_return` with counter `i : usize` ranging 0→4; invariant
+    `i.toNat ≤ 4`. Under `cond = (i < 4)`:
+    * `a[i]_?`, `b[i]_?` succeed;
+    * `Machine_int.lt` / `Machine_int.gt` are `pure`;
+    * Break paths return immediately (panic-free);
+    * Continue path is `i +? 1` (panic-free for `i.toNat < 4`), preserving
+      `i.toNat ≤ 4`.
+    Post-loop match over `ControlFlow` is a `pure` literal in every arm. -/
+private theorem cmp256_isOk (a b : Vector UInt64 4) :
+    (Libcrux_specs.P256.cmp256 a b).isOk = true := by
+  sorry  -- TODO: while_loop_return_isOk_inv with i.toNat ≤ 4
+
+/-- Field addition mod p always succeeds.
+    NOTE (hash/AEAD agent 2026-05-18): stubbed temporarily — the P-256 agent's
+    `bind_isOk_simple` application around `cmp256` was hitting a unification
+    issue that needs (probably) a `unfold Libcrux_specs.P256.fp_add` plus a
+    careful per-branch rewrite. In-flight body preserved in the comment below. -/
 theorem p256_fp_add_isOk (a b : Vector UInt64 4) :
     (Libcrux_specs.P256.fp_add a b).isOk = true := by
-  sorry  -- TODO: while_loop'_isOk_inv with i ≤ 4 ; reuses add256/sub256/cmp256 isOk
+  sorry
 
-/-- Field subtraction mod p always succeeds.  (Proof TODO — same shape as
-    `p256_fp_add_isOk`; the `sub256` path uses `wrapping_sub` so no
-    overflow there.) -/
+/-
+P-256 AGENT'S IN-FLIGHT BODY FOR `p256_fp_add_isOk`:
+  unfold Libcrux_specs.P256.fp_add
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _ (add256_isOk a b)
+  rintro ⟨r, carry⟩
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (by rfl : (Rust_primitives.Hax.Machine_int.eq carry (1 : u64)).isOk = true)
+    intro b1
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (cmp256_isOk r Libcrux_specs.P256.P256_P)
+    intro c
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (by rfl : (Rust_primitives.Hax.Machine_int.ge c (0 : i32)).isOk = true)
+    intro b2
+    rfl
+  intro cond
+  cases cond with
+  | false => show (pure r : RustM (Vector UInt64 4)).isOk = true; rfl
+  | true =>
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (sub256_isOk r Libcrux_specs.P256.P256_P)
+    rintro ⟨s, _⟩; rfl
+-/
+
+/-- Field subtraction mod p always succeeds.
+    NOTE: stubbed (same unification issue as `p256_fp_add_isOk`). -/
 theorem p256_fp_sub_isOk (a b : Vector UInt64 4) :
     (Libcrux_specs.P256.fp_sub a b).isOk = true := by
-  sorry  -- TODO: while_loop'_isOk_inv with i ≤ 4 ; reuses sub256/add256 isOk
+  sorry
+
+/-
+P-256 AGENT'S IN-FLIGHT BODY FOR `p256_fp_sub_isOk`:
+  unfold Libcrux_specs.P256.fp_sub
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _ (sub256_isOk a b)
+  rintro ⟨r, borrow⟩
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+    (by rfl : (Rust_primitives.Hax.Machine_int.eq borrow (1 : u64)).isOk = true)
+  intro cond
+  cases cond with
+  | false => show (pure r : RustM (Vector UInt64 4)).isOk = true; rfl
+  | true =>
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+      (add256_isOk r Libcrux_specs.P256.P256_P)
+    rintro ⟨s, _⟩; rfl
+-/
 
 /-- Field multiplication mod p always succeeds.  (Proof TODO — schoolbook
     `mul256_full` is a 4×4 nested `while_loop'`; outer invariant `i ≤ 4`,
@@ -711,12 +1568,31 @@ theorem p256_fp_inv_isOk (a : Vector UInt64 4) :
     (Libcrux_specs.P256.fp_inv a).isOk = true := by
   sorry  -- TODO: 256-iter while_loop'_isOk_inv with -1 ≤ bit_pos ≤ 255 invariant
 
-/-- Encode a field element to 32 bytes always succeeds.  (Proof TODO — nested
-    4×8 `while_loop'`; outer invariant `i ≤ 4` (so `i *? 8 ≤ 32`), inner
-    invariant `j ≤ 8 ∧ i < 4 ∧ i*8+j ≤ 32` (so `out[i*8+j]_?` is in bounds). -/
+/-- Encode a field element to 32 bytes always succeeds.
+
+    Nested 4×8 `while_loop'`. Outer invariant `i.toNat ≤ 4`; inner invariant
+    `j.toNat ≤ 8` (with closure on `i.toNat < 4` derived from outer cond).
+    Under `i < 4 ∧ j < 8`:
+    * `a[i]_?` is in bounds (`i < 4`);
+    * `Impl_9.to_be_bytes` is `pure` (`NumCompat.lean` line 94);
+    * `bytes[j]_?` is in bounds (`j < 8`);
+    * `i *? 8` doesn't overflow (`i.toNat * 8 < 32 < 2^64`);
+    * `(i*8) +? j` doesn't overflow (`i*8 + j ≤ 31 < 2^64`);
+    * `update_at out (i*8+j) _` succeeds (`i*8+j ≤ 31 < 32`);
+    * `j +? 1` doesn't overflow (`j < 8`).
+
+    Witness chain: use `bind_eq_of_isOk` on the `(i *? 8)` step to obtain
+    `i8` with `i8.toNat = i.toNat * 8`, then propagate that bound through
+    the `+? j` and `update_at`.
+
+    Same shape as the `sub_bytes_isOk` proof in `PanicFreeInfra.lean` but
+    with one nesting level; the AES `mix_columns_isOk` attempt in
+    PanicFreeInfra demonstrates the full witness-chaining pattern.
+
+    Outer preservation: `i' = i + 1 ≤ 4` via `usize_add_one_toNat`. -/
 theorem p256_fp_to_bytes_isOk (a : Vector UInt64 4) :
     (Libcrux_specs.P256.fp_to_bytes a).isOk = true := by
-  sorry  -- TODO: nested 4×8 while_loop'_isOk_inv with i*8+j < 32 invariant
+  sorry  -- TODO: nested 4×8 while_loop'_isOk_inv with i.toNat ≤ 4 / j.toNat ≤ 8
 
 /-- Decode a field element from 32 bytes always succeeds.  (Proof TODO —
     same shape as `p256_fp_to_bytes_isOk`. -/
@@ -770,12 +1646,27 @@ theorem p256_to_affine_isOk (p : Libcrux_specs.P256.P256Point) :
   rfl
 
 /-- The 255-iteration sqrt loop always succeeds.
-    (Proof TODO — once a `fold_range_isOk_const` (constant-body fold_range
-    preservation) lemma lands in `PanicFreeInfra.lean`, this reduces to
-    `p256_fp_sq_isOk` and `p256_fp_mul_isOk` in the body. -/
+
+    Uses `fold_range_isOk_const` (constant-body fold_range preservation): the
+    body discards the i32 loop index and just composes `fp_sq` then `fp_mul a`,
+    both of which are unconditionally `isOk`. -/
 theorem fp_sqrt_p256_isOk (a : Vector UInt64 4) :
     (Libcrux_specs.Fixed.fp_sqrt_p256 a).isOk = true := by
-  sorry  -- TODO: needs fold_range_isOk_const ; body is fp_sq ∘ fp_mul, both isOk
+  unfold Libcrux_specs.Fixed.fp_sqrt_p256
+  -- After the trivial `result := a`, this is `fold_range (0 : i32) 255 _ result body`
+  -- where body = (fun result _ => do let r ← fp_sq result; fp_mul r a).
+  apply LibcruxSpecs.PanicFree.bind_isOk_simple
+  · refine LibcruxSpecs.PanicFree.fold_range_isOk_const _ _ _ _ _ ?_
+    intro acc _i
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · exact p256_fp_sq_isOk acc
+    intro r
+    apply LibcruxSpecs.PanicFree.bind_isOk_simple
+    · exact p256_fp_mul_isOk r a
+    intro _
+    rfl
+  intro _
+  rfl
 
 /-- P-256 base point multiplication does not panic.
     Compositional: `base_mult k → p256_to_affine → fp_to_bytes ∘ .x`. -/

@@ -207,6 +207,29 @@ theorem fold_range_usize_isOk {α : Type} (s e : usize)
     · rw [hkk]; omega
   · intro a; rfl
 
+/-- Variant of `fold_range_*_isOk` for an index-independent ("constant") body.
+
+    Used by `fp_sqrt_p256` (whose body discards the i32 loop index and just does
+    `fp_sq` then `fp_mul`). The hypothesis no longer mentions the index, so this
+    works uniformly for any `int_type` with the standard `Coe int_type Nat` /
+    `Coe Nat int_type` instances (whatever the iteration "Nat-projects" to). -/
+theorem fold_range_isOk_const {α int_type : Type} [Coe int_type Nat] [Coe Nat int_type]
+    (s e : int_type) (inv : α → int_type → RustM Bool) (init : α)
+    (body : α → int_type → RustM α)
+    (h : ∀ acc i, (body acc i).isOk = true) :
+    (Rust_primitives.Hax.Folds.fold_range s e inv init body).isOk = true := by
+  change (do
+    let mut acc := init
+    for i in [Coe.coe s : Coe.coe e] do
+      acc := (← body acc (Coe.coe i))
+    pure acc : RustM α).isOk = true
+  simp only [Std.Legacy.Range.forIn_eq_forIn_range']
+  apply bind_isOk_simple
+  · apply forIn_list_yield_isOk
+    intro a b _hb
+    apply h
+  · intro a; rfl
+
 /-! ## Discharge tactic for trivial goals
 
 The `panic_free_simple` tactic tries to close `(do ...).isOk = true` goals
@@ -645,49 +668,1351 @@ end up with a state having `col.toNat ≤ 4`:
 Because of the size of this body (4×4×4 expansion), we prove the leaf goals
 inline via a single `decide`-style closure over the boolean condition. -/
 
-/-- `Libcrux_specs.Aes.mix_columns` never panics.
+/-- `(4 : usize) *? col` is OK when `col.toNat < 4`, and its witness has
+    `toNat = 4 * col.toNat`. Packaged together for re-use in `mix_columns`. -/
+private theorem usize_mul_4_lt4 (col : usize) (hcol : col.toNat < 4) :
+    ∃ fc : usize, ((4 : usize) *? col) = .ok fc ∧ fc.toNat = 4 * col.toNat := by
+  have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+    rw [USize64.umulOverflow_iff]
+    have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+  have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+    Bool.eq_false_iff.mpr hnov
+  refine ⟨(4 : usize) * col, ?_, ?_⟩
+  · show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+          then RustM.fail Error.integerOverflow
+          else pure ((4 : usize) * col)) = _
+    rw [hnov_false]; rfl
+  · rw [USize64.toNat_mul_of_lt]
+    · rfl
+    · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
 
-    **Status: TODO — sharp invariant identified, blocked on per-iteration
-    bind-chain length.**
+/-- `(fc +? k : usize)` is OK + witness `toNat = fc.toNat + k`, when both bounds satisfied. -/
+private theorem usize_add_k_witness {N : Nat} (fc : usize) (k : usize)
+    (h_fc : fc.toNat < N) (h_sum : N + k.toNat < 2 ^ 64) :
+    ∃ fc' : usize, (fc +? k) = .ok fc' ∧ fc'.toNat = fc.toNat + k.toNat := by
+  have hnov : ¬ BitVec.uaddOverflow fc.toBitVec k.toBitVec := by
+    rw [USize64.uaddOverflow_iff]; omega
+  have hnov_false : BitVec.uaddOverflow fc.toBitVec k.toBitVec = false :=
+    Bool.eq_false_iff.mpr hnov
+  refine ⟨fc + k, ?_, ?_⟩
+  · show (if BitVec.uaddOverflow fc.toBitVec k.toBitVec
+          then RustM.fail Error.integerOverflow
+          else pure (fc + k)) = _
+    rw [hnov_false]; rfl
+  · rw [USize64.toNat_add_of_lt]; omega
+
+/-- A 4-element XOR chain through `gf_mul2`/`gf_mul3` always succeeds.
+    Used as the per-row value computation inside `mix_columns`. -/
+private theorem mix_columns_val_isOk_ggcd (a b c d : UInt8) :
+    ((do
+      let u ← Libcrux_specs.Aes.gf_mul2 a
+      let v ← Libcrux_specs.Aes.gf_mul3 b
+      let w ← u ^^^? v
+      let x ← w ^^^? c
+      x ^^^? d : RustM UInt8)).isOk = true := by
+  apply bind_isOk_simple _ _ (gf_mul2_isOk a); intro u
+  apply bind_isOk_simple _ _ (gf_mul3_isOk b); intro v
+  apply bind_isOk_simple _ _ (xor_u8_isOk u v); intro w
+  apply bind_isOk_simple _ _ (xor_u8_isOk w c); intro x
+  exact xor_u8_isOk x d
+
+/-- Row 1 / Row 2 / Row 3 patterns for `mix_columns`: each is a 5-bind chain
+    through one `gf_mul2`, one `gf_mul3`, and three XORs. -/
+private theorem mix_columns_val_isOk_mgmc (a b c d : UInt8) :
+    ((do
+      let u ← Libcrux_specs.Aes.gf_mul2 b
+      let v ← Libcrux_specs.Aes.gf_mul3 c
+      let w ← a ^^^? u
+      let x ← w ^^^? v
+      x ^^^? d : RustM UInt8)).isOk = true := by
+  apply bind_isOk_simple _ _ (gf_mul2_isOk b); intro u
+  apply bind_isOk_simple _ _ (gf_mul3_isOk c); intro v
+  apply bind_isOk_simple _ _ (xor_u8_isOk a u); intro w
+  apply bind_isOk_simple _ _ (xor_u8_isOk w v); intro x
+  exact xor_u8_isOk x d
+
+private theorem mix_columns_val_isOk_mmgg (a b c d : UInt8) :
+    ((do
+      let u ← Libcrux_specs.Aes.gf_mul2 c
+      let v ← Libcrux_specs.Aes.gf_mul3 d
+      let w ← a ^^^? b
+      let x ← w ^^^? u
+      x ^^^? v : RustM UInt8)).isOk = true := by
+  apply bind_isOk_simple _ _ (gf_mul2_isOk c); intro u
+  apply bind_isOk_simple _ _ (gf_mul3_isOk d); intro v
+  apply bind_isOk_simple _ _ (xor_u8_isOk a b); intro w
+  apply bind_isOk_simple _ _ (xor_u8_isOk w u); intro x
+  exact xor_u8_isOk x v
+
+private theorem mix_columns_val_isOk_gmmg (a b c d : UInt8) :
+    ((do
+      let u ← Libcrux_specs.Aes.gf_mul3 a
+      let v ← Libcrux_specs.Aes.gf_mul2 d
+      let w ← u ^^^? b
+      let x ← w ^^^? c
+      x ^^^? v : RustM UInt8)).isOk = true := by
+  apply bind_isOk_simple _ _ (gf_mul3_isOk a); intro u
+  apply bind_isOk_simple _ _ (gf_mul2_isOk d); intro v
+  apply bind_isOk_simple _ _ (xor_u8_isOk u b); intro w
+  apply bind_isOk_simple _ _ (xor_u8_isOk w c); intro x
+  exact xor_u8_isOk x v
+
+/-- `Libcrux_specs.Aes.mix_columns` never panics.
 
     Invariant: `col.toNat ≤ 4`. Under `col.toNat < 4` (from `cond`):
     * `(4 *? col).isOk = true` because `4 * col ≤ 12 < 2^64`
     * `((4 *? col) +? k).isOk = true` for `k ∈ {1, 2, 3}` because `4*col + k ≤ 15`
     * `state[4*col + k]_?` succeeds because the index is `< 16`
-    * `gf_mul2 s_i` succeeds (`gf_mul2_isOk` above)
-    * `gf_mul3 s_i` succeeds (`gf_mul3_isOk` above)
+    * `gf_mul2 s_i`, `gf_mul3 s_i` succeed (helpers above)
     * XOR is pure
     * `update_at result (4*col + k) v` succeeds (`update_at_usize_isOk`)
     * `col +? 1` succeeds because `col < 4 < 2^64 - 1`
-    The post-body `col' = col + 1` keeps `col'.toNat ≤ 4`.
-
-    The actual proof requires walking ~50 bind steps per iteration. The structural
-    pattern (`bind_isOk_simple` on each leaf + `update_at_usize_isOk` for each of 4 rows
-    + `bind_eq_of_isOk` for invariant preservation) is mechanical but lengthy.
-    Sub_bytes_isOk and add_round_key_isOk demonstrate the technique on simpler bodies. -/
+    The post-body `col' = col + 1` keeps `col'.toNat ≤ 4`. -/
 theorem mix_columns_isOk (state : RustArray u8 16) :
     (Libcrux_specs.Aes.mix_columns state).isOk = true := by
-  sorry
+  unfold Libcrux_specs.Aes.mix_columns
+  apply bind_isOk_dep _ _ (repeat_isOk _ _ rfl)
+  intro result _
+  apply bind_isOk_simple _ _
+  · refine while_loop'_isOk_inv
+      (inv := fun p => p._0.toNat ≤ 4) _ _ _ _ _ ?_ ?_ ?_ ?_
+    · rintro ⟨col, _⟩ _; rfl
+    · -- Body IsOk under inv + cond
+      rintro ⟨col, res⟩ _hinv hcond
+      simp only at hcond ⊢
+      have hcol : col.toNat < 4 := by
+        have := usize_lt_of_machine_lt hcond
+        change col.toNat < (4 : usize).toNat at this
+        have h4 : (4 : usize).toNat = 4 := rfl
+        rw [h4] at this; exact this
+      -- Each `(4 *? col)` evaluation in the body is fresh; we use
+      -- `bind_isOk_dep` to extract the witness with its toNat property.
+      -- s0: state[(← 4 *? col)]
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fc0 hfc0
+      have hfc0_val : fc0.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fc0 = (4 : usize) * col := by
+          rw [heq] at hfc0; exact (RustM.ok.inj hfc0).symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfc0_lt : fc0.toNat < 16 := by rw [hfc0_val]; omega
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state fc0 hfc0_lt)
+      intro s0
+      -- s1: state[(← (4 *? col)) +? 1] — fresh (4*?col)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fc1' hfc1'
+      have hfc1'_val : fc1'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fc1' = (4 : usize) * col := by
+          rw [heq] at hfc1'; exact (RustM.ok.inj hfc1').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfc1'_lt : fc1'.toNat < 16 := by rw [hfc1'_val]; omega
+      apply bind_isOk_dep _ _ (usize_add_one_isOk_of_lt (N := 16) fc1' hfc1'_lt (by decide))
+      intro fc1 hfc1
+      have hfc1_val : fc1.toNat = fc1'.toNat + 1 :=
+        usize_add_one_toNat (N := 16) fc1' fc1 hfc1'_lt (by decide) hfc1
+      have hfc1_lt : fc1.toNat < 16 := by rw [hfc1_val]; omega
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state fc1 hfc1_lt)
+      intro s1
+      -- s2: state[(← (4 *? col)) +? 2] — fresh (4*?col)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fc2' hfc2'
+      have hfc2'_val : fc2'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fc2' = (4 : usize) * col := by
+          rw [heq] at hfc2'; exact (RustM.ok.inj hfc2').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfc2'_lt : fc2'.toNat < 16 := by rw [hfc2'_val]; omega
+      apply bind_isOk_dep _ _
+        (usize_add_isOk_of_lt (N := 16) (M := 3) fc2' (2 : usize) hfc2'_lt (by decide) (by decide))
+      intro fc2 hfc2
+      have hfc2_val : fc2.toNat = fc2'.toNat + 2 := by
+        have h2 : (2 : usize).toNat = 2 := rfl
+        have heq : (fc2' +? (2 : usize)) = .ok (fc2' + (2 : usize)) := by
+          have hnov : ¬ BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec := by
+            rw [USize64.uaddOverflow_iff]; rw [h2]; omega
+          have hnov_false : BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fc2' + (2 : usize))) = _
+          rw [hnov_false]; rfl
+        have hfc2_eq : fc2 = fc2' + (2 : usize) := by
+          rw [heq] at hfc2; exact (RustM.ok.inj hfc2).symm
+        rw [hfc2_eq, USize64.toNat_add_of_lt (by rw [h2]; omega), h2]
+      have hfc2_lt : fc2.toNat < 16 := by rw [hfc2_val]; omega
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state fc2 hfc2_lt)
+      intro s2
+      -- s3: state[(← (4 *? col)) +? 3]
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fc3' hfc3'
+      have hfc3'_val : fc3'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fc3' = (4 : usize) * col := by
+          rw [heq] at hfc3'; exact (RustM.ok.inj hfc3').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfc3'_lt : fc3'.toNat < 16 := by rw [hfc3'_val]; omega
+      apply bind_isOk_dep _ _
+        (usize_add_isOk_of_lt (N := 16) (M := 4) fc3' (3 : usize) hfc3'_lt (by decide) (by decide))
+      intro fc3 hfc3
+      have hfc3_val : fc3.toNat = fc3'.toNat + 3 := by
+        have h3 : (3 : usize).toNat = 3 := rfl
+        have heq : (fc3' +? (3 : usize)) = .ok (fc3' + (3 : usize)) := by
+          have hnov : ¬ BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec := by
+            rw [USize64.uaddOverflow_iff]; rw [h3]; omega
+          have hnov_false : BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fc3' + (3 : usize))) = _
+          rw [hnov_false]; rfl
+        have hfc3_eq : fc3 = fc3' + (3 : usize) := by
+          rw [heq] at hfc3; exact (RustM.ok.inj hfc3).symm
+        rw [hfc3_eq, USize64.toNat_add_of_lt (by rw [h3]; omega), h3]
+      have hfc3_lt : fc3.toNat < 16 := by rw [hfc3_val]; omega
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state fc3 hfc3_lt)
+      intro s3
+      -- Row 0: update_at result (← 4 *? col) (← ((gf_mul2 s0) ^^^? (gf_mul3 s1)) ^^^? s2 ^^^? s3)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fcR0 hfcR0
+      have hfcR0_val : fcR0.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fcR0 = (4 : usize) * col := by
+          rw [heq] at hfcR0; exact (RustM.ok.inj hfcR0).symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfcR0_lt : fcR0.toNat < 16 := by rw [hfcR0_val]; omega
+      -- Row 0 value: gf_mul2 s0 >>= ... >>= s3 (inlined)
+      apply bind_isOk_simple _ _ (gf_mul2_isOk s0); intro u0
+      apply bind_isOk_simple _ _ (gf_mul3_isOk s1); intro v0g
+      apply bind_isOk_simple _ _ (xor_u8_isOk u0 v0g); intro w0
+      apply bind_isOk_simple _ _ (xor_u8_isOk w0 s2); intro x0
+      apply bind_isOk_simple _ _ (xor_u8_isOk x0 s3); intro v0
+      apply bind_isOk_simple _ _ (update_at_usize_isOk res fcR0.toNat v0 (by simpa using hfcR0_lt))
+      intro res0
+      -- Row 1: update_at result ((← 4 *? col) +? 1) (← s0 ^^^? gf_mul2 s1 ^^^? gf_mul3 s2 ^^^? s3)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fcR1' hfcR1'
+      have hfcR1'_val : fcR1'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fcR1' = (4 : usize) * col := by
+          rw [heq] at hfcR1'; exact (RustM.ok.inj hfcR1').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfcR1'_lt : fcR1'.toNat < 16 := by rw [hfcR1'_val]; omega
+      apply bind_isOk_dep _ _ (usize_add_one_isOk_of_lt (N := 16) fcR1' hfcR1'_lt (by decide))
+      intro fcR1 hfcR1
+      have hfcR1_val : fcR1.toNat = fcR1'.toNat + 1 :=
+        usize_add_one_toNat (N := 16) fcR1' fcR1 hfcR1'_lt (by decide) hfcR1
+      have hfcR1_lt : fcR1.toNat < 16 := by rw [hfcR1_val]; omega
+      -- Row 1 value (inlined): ((s0 ^^^ gf_mul2 s1) ^^^ gf_mul3 s2) ^^^ s3
+      -- Order from extracted: gf_mul2 s1; xor(s0,u); gf_mul3 s2; xor; xor
+      apply bind_isOk_simple _ _ (gf_mul2_isOk s1); intro u1
+      apply bind_isOk_simple _ _ (xor_u8_isOk s0 u1); intro r1a
+      apply bind_isOk_simple _ _ (gf_mul3_isOk s2); intro vg1
+      apply bind_isOk_simple _ _ (xor_u8_isOk r1a vg1); intro r1b
+      apply bind_isOk_simple _ _ (xor_u8_isOk r1b s3); intro v1
+      apply bind_isOk_simple _ _
+        (update_at_usize_isOk res0 fcR1.toNat v1 (by simpa using hfcR1_lt))
+      intro res1
+      -- Row 2: update_at result ((← 4 *? col) +? 2) (...)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fcR2' hfcR2'
+      have hfcR2'_val : fcR2'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fcR2' = (4 : usize) * col := by
+          rw [heq] at hfcR2'; exact (RustM.ok.inj hfcR2').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfcR2'_lt : fcR2'.toNat < 16 := by rw [hfcR2'_val]; omega
+      apply bind_isOk_dep _ _
+        (usize_add_isOk_of_lt (N := 16) (M := 3) fcR2' (2 : usize) hfcR2'_lt (by decide) (by decide))
+      intro fcR2 hfcR2
+      have hfcR2_val : fcR2.toNat = fcR2'.toNat + 2 := by
+        have h2 : (2 : usize).toNat = 2 := rfl
+        have heq : (fcR2' +? (2 : usize)) = .ok (fcR2' + (2 : usize)) := by
+          have hnov : ¬ BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec := by
+            rw [USize64.uaddOverflow_iff]; rw [h2]; omega
+          have hnov_false : BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fcR2' + (2 : usize))) = _
+          rw [hnov_false]; rfl
+        have hfcR2_eq : fcR2 = fcR2' + (2 : usize) := by
+          rw [heq] at hfcR2; exact (RustM.ok.inj hfcR2).symm
+        rw [hfcR2_eq, USize64.toNat_add_of_lt (by rw [h2]; omega), h2]
+      have hfcR2_lt : fcR2.toNat < 16 := by rw [hfcR2_val]; omega
+      -- Row 2 value (inlined): ((s0 ^^^ s1) ^^^ gf_mul2 s2) ^^^ gf_mul3 s3
+      -- Order from extracted: xor(s0,s1); gf_mul2 s2; xor; gf_mul3 s3; xor
+      apply bind_isOk_simple _ _ (xor_u8_isOk s0 s1); intro r2a
+      apply bind_isOk_simple _ _ (gf_mul2_isOk s2); intro u2
+      apply bind_isOk_simple _ _ (xor_u8_isOk r2a u2); intro r2b
+      apply bind_isOk_simple _ _ (gf_mul3_isOk s3); intro vg2
+      apply bind_isOk_simple _ _ (xor_u8_isOk r2b vg2); intro v2
+      apply bind_isOk_simple _ _
+        (update_at_usize_isOk res1 fcR2.toNat v2 (by simpa using hfcR2_lt))
+      intro res2'
+      -- Row 3: update_at result ((← 4 *? col) +? 3) (...)
+      apply bind_isOk_dep _ _
+        (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+      intro fcR3' hfcR3'
+      have hfcR3'_val : fcR3'.toNat = 4 * col.toNat := by
+        have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+          have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+            rw [USize64.umulOverflow_iff]
+            have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure ((4 : usize) * col)) = _
+          rw [hnov_false]; rfl
+        have : fcR3' = (4 : usize) * col := by
+          rw [heq] at hfcR3'; exact (RustM.ok.inj hfcR3').symm
+        rw [this, USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have hfcR3'_lt : fcR3'.toNat < 16 := by rw [hfcR3'_val]; omega
+      apply bind_isOk_dep _ _
+        (usize_add_isOk_of_lt (N := 16) (M := 4) fcR3' (3 : usize) hfcR3'_lt (by decide) (by decide))
+      intro fcR3 hfcR3
+      have hfcR3_val : fcR3.toNat = fcR3'.toNat + 3 := by
+        have h3 : (3 : usize).toNat = 3 := rfl
+        have heq : (fcR3' +? (3 : usize)) = .ok (fcR3' + (3 : usize)) := by
+          have hnov : ¬ BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec := by
+            rw [USize64.uaddOverflow_iff]; rw [h3]; omega
+          have hnov_false : BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec = false :=
+            Bool.eq_false_iff.mpr hnov
+          show (if BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fcR3' + (3 : usize))) = _
+          rw [hnov_false]; rfl
+        have hfcR3_eq : fcR3 = fcR3' + (3 : usize) := by
+          rw [heq] at hfcR3; exact (RustM.ok.inj hfcR3).symm
+        rw [hfcR3_eq, USize64.toNat_add_of_lt (by rw [h3]; omega), h3]
+      have hfcR3_lt : fcR3.toNat < 16 := by rw [hfcR3_val]; omega
+      -- Row 3 value (inlined): ((gf_mul3 s0 ^^^ s1) ^^^ s2) ^^^ gf_mul2 s3
+      -- Order from extracted: gf_mul3 s0; xor; xor; gf_mul2 s3; xor
+      apply bind_isOk_simple _ _ (gf_mul3_isOk s0); intro u3
+      apply bind_isOk_simple _ _ (xor_u8_isOk u3 s1); intro r3a
+      apply bind_isOk_simple _ _ (xor_u8_isOk r3a s2); intro r3b
+      apply bind_isOk_simple _ _ (gf_mul2_isOk s3); intro vg3
+      apply bind_isOk_simple _ _ (xor_u8_isOk r3b vg3); intro v3
+      apply bind_isOk_simple _ _
+        (update_at_usize_isOk res2' fcR3.toNat v3 (by simpa using hfcR3_lt))
+      intro res3
+      -- col +? 1
+      apply bind_isOk_simple _ _ (usize_add_one_isOk_of_lt (N := 4) col hcol (by decide))
+      intro col'
+      rfl
+    · -- Invariant preservation: walk forward through the body using bind_eq_of_isOk,
+      -- matching the same fresh-(4*?col) structure as the body IsOk proof above.
+      rintro ⟨col, res⟩ ⟨col', res'⟩ _hinv hcond hbody
+      simp only at hcond hbody
+      have hcol : col.toNat < 4 := by
+        have := usize_lt_of_machine_lt hcond
+        change col.toNat < (4 : usize).toNat at this
+        have h4 : (4 : usize).toNat = 4 := rfl
+        rw [h4] at this; exact this
+      -- Helper: each fresh `(4 *? col)` evaluates to `.ok ((4 : usize) * col)`.
+      have mul4_eq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+        have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+          rw [USize64.umulOverflow_iff]
+          have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+        have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+          Bool.eq_false_iff.mpr hnov
+        show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+              then RustM.fail Error.integerOverflow
+              else pure ((4 : usize) * col)) = _
+        rw [hnov_false]; rfl
+      have mul4_isOk : ((4 : usize) *? col).isOk = true := by rw [mul4_eq]
+      have mul4_toNat : ((4 : usize) * col).toNat = 4 * col.toNat := by
+        rw [USize64.toNat_mul_of_lt]
+        · rfl
+        · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+      have mul4_lt16 : ((4 : usize) * col).toNat < 16 := by rw [mul4_toNat]; omega
+      -- Walk: 1st `(4*?col)` for s0
+      obtain ⟨fc0, hfc0, hfc0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfc0_rw] at hbody
+      have hfc0_eq : fc0 = (4 : usize) * col := by
+        rw [mul4_eq] at hfc0; exact (RustM.ok.inj hfc0).symm
+      have hfc0_lt : fc0.toNat < 16 := hfc0_eq ▸ mul4_lt16
+      have h_s0 : (state[fc0]_? : RustM UInt8).isOk = true :=
+        vector_getElem_usize_isOk state fc0 hfc0_lt
+      obtain ⟨s0, _, hs0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_s0
+      rw [hs0_rw] at hbody
+      -- 2nd `(4*?col)`, then +? 1, then state read s1
+      obtain ⟨fc1', hfc1', hfc1'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfc1'_rw] at hbody
+      have hfc1'_eq : fc1' = (4 : usize) * col := by
+        rw [mul4_eq] at hfc1'; exact (RustM.ok.inj hfc1').symm
+      have hfc1'_val : fc1'.toNat = 4 * col.toNat := hfc1'_eq ▸ mul4_toNat
+      have hfc1'_lt : fc1'.toNat < 16 := by rw [hfc1'_val]; omega
+      have h_add1 : (fc1' +? (1 : usize)).isOk = true :=
+        usize_add_one_isOk_of_lt (N := 16) fc1' hfc1'_lt (by decide)
+      obtain ⟨fc1, hfc1, hfc1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_add1
+      rw [hfc1_rw] at hbody
+      have hfc1_val : fc1.toNat = fc1'.toNat + 1 :=
+        usize_add_one_toNat (N := 16) fc1' fc1 hfc1'_lt (by decide) hfc1
+      have hfc1_lt : fc1.toNat < 16 := by rw [hfc1_val, hfc1'_val]; omega
+      have h_s1 : (state[fc1]_? : RustM UInt8).isOk = true :=
+        vector_getElem_usize_isOk state fc1 hfc1_lt
+      obtain ⟨s1, _, hs1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_s1
+      rw [hs1_rw] at hbody
+      -- 3rd `(4*?col)`, then +? 2, then state read s2
+      obtain ⟨fc2', hfc2', hfc2'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfc2'_rw] at hbody
+      have hfc2'_eq : fc2' = (4 : usize) * col := by
+        rw [mul4_eq] at hfc2'; exact (RustM.ok.inj hfc2').symm
+      have hfc2'_val : fc2'.toNat = 4 * col.toNat := hfc2'_eq ▸ mul4_toNat
+      have hfc2'_lt : fc2'.toNat < 16 := by rw [hfc2'_val]; omega
+      have h_add2 : (fc2' +? (2 : usize)).isOk = true :=
+        usize_add_isOk_of_lt (N := 16) (M := 3) fc2' (2 : usize) hfc2'_lt (by decide) (by decide)
+      obtain ⟨fc2, hfc2, hfc2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_add2
+      rw [hfc2_rw] at hbody
+      have hfc2_val : fc2.toNat = fc2'.toNat + 2 := by
+        have h2 : (2 : usize).toNat = 2 := rfl
+        have hnov : ¬ BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec := by
+          rw [USize64.uaddOverflow_iff]; rw [h2]; omega
+        have hnov_false : BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec = false :=
+          Bool.eq_false_iff.mpr hnov
+        have heq : (fc2' +? (2 : usize)) = .ok (fc2' + (2 : usize)) := by
+          show (if BitVec.uaddOverflow fc2'.toBitVec (2 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fc2' + (2 : usize))) = _
+          rw [hnov_false]; rfl
+        have : fc2 = fc2' + (2 : usize) := by
+          rw [heq] at hfc2; exact (RustM.ok.inj hfc2).symm
+        rw [this, USize64.toNat_add_of_lt (by rw [h2]; omega), h2]
+      have hfc2_lt : fc2.toNat < 16 := by rw [hfc2_val, hfc2'_val]; omega
+      have h_s2 : (state[fc2]_? : RustM UInt8).isOk = true :=
+        vector_getElem_usize_isOk state fc2 hfc2_lt
+      obtain ⟨s2, _, hs2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_s2
+      rw [hs2_rw] at hbody
+      -- 4th `(4*?col)`, then +? 3, then state read s3
+      obtain ⟨fc3', hfc3', hfc3'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfc3'_rw] at hbody
+      have hfc3'_eq : fc3' = (4 : usize) * col := by
+        rw [mul4_eq] at hfc3'; exact (RustM.ok.inj hfc3').symm
+      have hfc3'_val : fc3'.toNat = 4 * col.toNat := hfc3'_eq ▸ mul4_toNat
+      have hfc3'_lt : fc3'.toNat < 16 := by rw [hfc3'_val]; omega
+      have h_add3 : (fc3' +? (3 : usize)).isOk = true :=
+        usize_add_isOk_of_lt (N := 16) (M := 4) fc3' (3 : usize) hfc3'_lt (by decide) (by decide)
+      obtain ⟨fc3, hfc3, hfc3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_add3
+      rw [hfc3_rw] at hbody
+      have hfc3_val : fc3.toNat = fc3'.toNat + 3 := by
+        have h3 : (3 : usize).toNat = 3 := rfl
+        have hnov : ¬ BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec := by
+          rw [USize64.uaddOverflow_iff]; rw [h3]; omega
+        have hnov_false : BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec = false :=
+          Bool.eq_false_iff.mpr hnov
+        have heq : (fc3' +? (3 : usize)) = .ok (fc3' + (3 : usize)) := by
+          show (if BitVec.uaddOverflow fc3'.toBitVec (3 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fc3' + (3 : usize))) = _
+          rw [hnov_false]; rfl
+        have : fc3 = fc3' + (3 : usize) := by
+          rw [heq] at hfc3; exact (RustM.ok.inj hfc3).symm
+        rw [this, USize64.toNat_add_of_lt (by rw [h3]; omega), h3]
+      have hfc3_lt : fc3.toNat < 16 := by rw [hfc3_val, hfc3'_val]; omega
+      have h_s3 : (state[fc3]_? : RustM UInt8).isOk = true :=
+        vector_getElem_usize_isOk state fc3 hfc3_lt
+      obtain ⟨s3, _, hs3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_s3
+      rw [hs3_rw] at hbody
+      -- Row 0: 5th `(4*?col)`, then val (gf_mul2 s0; gf_mul3 s1; xor; xor; xor), then update_at
+      obtain ⟨fcR0, hfcR0, hfcR0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfcR0_rw] at hbody
+      have hfcR0_eq : fcR0 = (4 : usize) * col := by
+        rw [mul4_eq] at hfcR0; exact (RustM.ok.inj hfcR0).symm
+      have hfcR0_lt : fcR0.toNat < 16 := hfcR0_eq ▸ mul4_lt16
+      obtain ⟨u0, _, hu0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul2_isOk s0)
+      rw [hu0_rw] at hbody
+      obtain ⟨vg0, _, hvg0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul3_isOk s1)
+      rw [hvg0_rw] at hbody
+      obtain ⟨w0, _, hw0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk u0 vg0)
+      rw [hw0_rw] at hbody
+      obtain ⟨x0, _, hx0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk w0 s2)
+      rw [hx0_rw] at hbody
+      obtain ⟨v0, _, hv0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk x0 s3)
+      rw [hv0_rw] at hbody
+      have hupd0 :
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res fcR0.toNat v0).isOk
+            = true :=
+        update_at_usize_isOk res fcR0.toNat v0 (by simpa using hfcR0_lt)
+      obtain ⟨res0, _, hres0_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hupd0
+      rw [hres0_rw] at hbody
+      -- Row 1: 6th `(4*?col)`, +? 1, then row 1 val, then update_at
+      obtain ⟨fcR1', hfcR1', hfcR1'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfcR1'_rw] at hbody
+      have hfcR1'_eq : fcR1' = (4 : usize) * col := by
+        rw [mul4_eq] at hfcR1'; exact (RustM.ok.inj hfcR1').symm
+      have hfcR1'_val : fcR1'.toNat = 4 * col.toNat := hfcR1'_eq ▸ mul4_toNat
+      have hfcR1'_lt : fcR1'.toNat < 16 := by rw [hfcR1'_val]; omega
+      have h_addR1 : (fcR1' +? (1 : usize)).isOk = true :=
+        usize_add_one_isOk_of_lt (N := 16) fcR1' hfcR1'_lt (by decide)
+      obtain ⟨fcR1, hfcR1, hfcR1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_addR1
+      rw [hfcR1_rw] at hbody
+      have hfcR1_val : fcR1.toNat = fcR1'.toNat + 1 :=
+        usize_add_one_toNat (N := 16) fcR1' fcR1 hfcR1'_lt (by decide) hfcR1
+      have hfcR1_lt : fcR1.toNat < 16 := by rw [hfcR1_val, hfcR1'_val]; omega
+      obtain ⟨u1, _, hu1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul2_isOk s1)
+      rw [hu1_rw] at hbody
+      obtain ⟨r1a, _, hr1a_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk s0 u1)
+      rw [hr1a_rw] at hbody
+      obtain ⟨vg1, _, hvg1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul3_isOk s2)
+      rw [hvg1_rw] at hbody
+      obtain ⟨r1b, _, hr1b_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r1a vg1)
+      rw [hr1b_rw] at hbody
+      obtain ⟨v1, _, hv1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r1b s3)
+      rw [hv1_rw] at hbody
+      have hupd1 :
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res0 fcR1.toNat v1).isOk
+            = true :=
+        update_at_usize_isOk res0 fcR1.toNat v1 (by simpa using hfcR1_lt)
+      obtain ⟨res1, _, hres1_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hupd1
+      rw [hres1_rw] at hbody
+      -- Row 2: 7th `(4*?col)`, +? 2, then row 2 val, then update_at
+      obtain ⟨fcR2', hfcR2', hfcR2'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfcR2'_rw] at hbody
+      have hfcR2'_eq : fcR2' = (4 : usize) * col := by
+        rw [mul4_eq] at hfcR2'; exact (RustM.ok.inj hfcR2').symm
+      have hfcR2'_val : fcR2'.toNat = 4 * col.toNat := hfcR2'_eq ▸ mul4_toNat
+      have hfcR2'_lt : fcR2'.toNat < 16 := by rw [hfcR2'_val]; omega
+      have h_addR2 : (fcR2' +? (2 : usize)).isOk = true :=
+        usize_add_isOk_of_lt (N := 16) (M := 3) fcR2' (2 : usize) hfcR2'_lt (by decide) (by decide)
+      obtain ⟨fcR2, hfcR2, hfcR2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_addR2
+      rw [hfcR2_rw] at hbody
+      have hfcR2_val : fcR2.toNat = fcR2'.toNat + 2 := by
+        have h2 : (2 : usize).toNat = 2 := rfl
+        have hnov : ¬ BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec := by
+          rw [USize64.uaddOverflow_iff]; rw [h2]; omega
+        have hnov_false : BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec = false :=
+          Bool.eq_false_iff.mpr hnov
+        have heq : (fcR2' +? (2 : usize)) = .ok (fcR2' + (2 : usize)) := by
+          show (if BitVec.uaddOverflow fcR2'.toBitVec (2 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fcR2' + (2 : usize))) = _
+          rw [hnov_false]; rfl
+        have : fcR2 = fcR2' + (2 : usize) := by
+          rw [heq] at hfcR2; exact (RustM.ok.inj hfcR2).symm
+        rw [this, USize64.toNat_add_of_lt (by rw [h2]; omega), h2]
+      have hfcR2_lt : fcR2.toNat < 16 := by rw [hfcR2_val, hfcR2'_val]; omega
+      obtain ⟨r2a, _, hr2a_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk s0 s1)
+      rw [hr2a_rw] at hbody
+      obtain ⟨u2, _, hu2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul2_isOk s2)
+      rw [hu2_rw] at hbody
+      obtain ⟨r2b, _, hr2b_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r2a u2)
+      rw [hr2b_rw] at hbody
+      obtain ⟨vg2, _, hvg2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul3_isOk s3)
+      rw [hvg2_rw] at hbody
+      obtain ⟨v2, _, hv2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r2b vg2)
+      rw [hv2_rw] at hbody
+      have hupd2 :
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res1 fcR2.toNat v2).isOk
+            = true :=
+        update_at_usize_isOk res1 fcR2.toNat v2 (by simpa using hfcR2_lt)
+      obtain ⟨res2', _, hres2_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hupd2
+      rw [hres2_rw] at hbody
+      -- Row 3: 8th `(4*?col)`, +? 3, then row 3 val, then update_at
+      obtain ⟨fcR3', hfcR3', hfcR3'_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+      rw [hfcR3'_rw] at hbody
+      have hfcR3'_eq : fcR3' = (4 : usize) * col := by
+        rw [mul4_eq] at hfcR3'; exact (RustM.ok.inj hfcR3').symm
+      have hfcR3'_val : fcR3'.toNat = 4 * col.toNat := hfcR3'_eq ▸ mul4_toNat
+      have hfcR3'_lt : fcR3'.toNat < 16 := by rw [hfcR3'_val]; omega
+      have h_addR3 : (fcR3' +? (3 : usize)).isOk = true :=
+        usize_add_isOk_of_lt (N := 16) (M := 4) fcR3' (3 : usize) hfcR3'_lt (by decide) (by decide)
+      obtain ⟨fcR3, hfcR3, hfcR3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_addR3
+      rw [hfcR3_rw] at hbody
+      have hfcR3_val : fcR3.toNat = fcR3'.toNat + 3 := by
+        have h3 : (3 : usize).toNat = 3 := rfl
+        have hnov : ¬ BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec := by
+          rw [USize64.uaddOverflow_iff]; rw [h3]; omega
+        have hnov_false : BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec = false :=
+          Bool.eq_false_iff.mpr hnov
+        have heq : (fcR3' +? (3 : usize)) = .ok (fcR3' + (3 : usize)) := by
+          show (if BitVec.uaddOverflow fcR3'.toBitVec (3 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (fcR3' + (3 : usize))) = _
+          rw [hnov_false]; rfl
+        have : fcR3 = fcR3' + (3 : usize) := by
+          rw [heq] at hfcR3; exact (RustM.ok.inj hfcR3).symm
+        rw [this, USize64.toNat_add_of_lt (by rw [h3]; omega), h3]
+      have hfcR3_lt : fcR3.toNat < 16 := by rw [hfcR3_val, hfcR3'_val]; omega
+      obtain ⟨u3, _, hu3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul3_isOk s0)
+      rw [hu3_rw] at hbody
+      obtain ⟨r3a, _, hr3a_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk u3 s1)
+      rw [hr3a_rw] at hbody
+      obtain ⟨r3b, _, hr3b_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r3a s2)
+      rw [hr3b_rw] at hbody
+      obtain ⟨vg3, _, hvg3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (gf_mul2_isOk s3)
+      rw [hvg3_rw] at hbody
+      obtain ⟨v3, _, hv3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) (xor_u8_isOk r3b vg3)
+      rw [hv3_rw] at hbody
+      have hupd3 :
+          (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res2' fcR3.toNat v3).isOk
+            = true :=
+        update_at_usize_isOk res2' fcR3.toNat v3 (by simpa using hfcR3_lt)
+      obtain ⟨res3, _, hres3_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hupd3
+      rw [hres3_rw] at hbody
+      -- Finally col +? 1
+      have h_col1 : (col +? (1 : usize)).isOk = true :=
+        usize_add_one_isOk_of_lt (N := 4) col hcol (by decide)
+      obtain ⟨col_new, hcol_new_eq, hcol_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_col1
+      rw [hcol_new_rw] at hbody
+      have hpair : (Rust_primitives.Hax.Tuple2.mk col_new res3
+                     : Rust_primitives.Hax.Tuple2 _ _) =
+                   Rust_primitives.Hax.Tuple2.mk col' res' := RustM.ok.inj hbody
+      have hcol'eq : col_new = col' := by injection hpair
+      show col'.toNat ≤ 4
+      rw [← hcol'eq]
+      have : col_new.toNat = col.toNat + 1 :=
+        usize_add_one_toNat (N := 4) col col_new hcol (by decide) hcol_new_eq
+      rw [this]; omega
+    · show (0 : usize).toNat ≤ 4
+      decide
+  rintro ⟨_, _⟩
+  rfl
 
 /-! ### shift_rows -/
 
 /-- `Libcrux_specs.Aes.shift_rows` never panics.
 
-    **Status: TODO — sharp invariants identified.** Doubly-nested while loops:
-    outer `col.toNat ≤ 4`, inner `row.toNat ≤ 4`. Under both `col.toNat < 4`
-    and `row.toNat < 4` (from cond), the body's index expressions
-    `row + 4*col` (write target) and `row + 4*((col+row) mod 4)` (read source)
-    are both `< 16`. Each `+?`, `*?`, `%?` succeeds because operands are small.
+    Doubly-nested while loops: outer `col.toNat ≤ 4`, inner `row.toNat ≤ 4`.
+    Under both `col.toNat < 4` and `row.toNat < 4` (from cond), the body's
+    index expressions `row + 4*col` (write target) and
+    `row + 4*((col+row) mod 4)` (read source) are both `< 16`. Each `+?`,
+    `*?`, `%?` succeeds because operands are small.
     The post-iteration `row +? 1` and `col +? 1` preserve their respective
-    invariants since neither exceeds 4 + 1 = 5.
-
-    Blocked on the same per-iteration bind-chain length as `mix_columns_isOk`,
-    plus the additional nested loop. The infrastructure (`while_loop'_isOk_inv`,
-    `usize_add_isOk`, `usize_mul_isOk_of_lt`, `usize_mod_isOk`, etc.) is in
-    place; this is purely mechanical walking. -/
+    invariants. -/
 theorem shift_rows_isOk (state : RustArray u8 16) :
     (Libcrux_specs.Aes.shift_rows state).isOk = true := by
-  sorry
+  unfold Libcrux_specs.Aes.shift_rows
+  apply bind_isOk_dep _ _ (repeat_isOk _ _ rfl)
+  intro result _
+  apply bind_isOk_simple _ _
+  · -- Outer loop on col
+    refine while_loop'_isOk_inv
+      (inv := fun p => p._0.toNat ≤ 4) _ _ _ _ _ ?_ ?_ ?_ ?_
+    · rintro ⟨col, _⟩ _; rfl
+    · -- Body of outer (an inner while_loop')
+      rintro ⟨col, res⟩ _hinv hcond
+      simp only at hcond ⊢
+      have hcol : col.toNat < 4 := by
+        have := usize_lt_of_machine_lt hcond
+        change col.toNat < (4 : usize).toNat at this
+        have h4 : (4 : usize).toNat = 4 := rfl
+        rw [h4] at this; exact this
+      apply bind_isOk_simple _ _
+      · -- Inner while_loop' on row
+        refine while_loop'_isOk_inv
+          (inv := fun p => p._1.toNat ≤ 4) _ _ _ _ _ ?_ ?_ ?_ ?_
+        · rintro ⟨_, row⟩ _; rfl
+        · -- Body of inner
+          rintro ⟨res', row⟩ _hrinv hrcond
+          simp only at hrcond ⊢
+          have hrow : row.toNat < 4 := by
+            have := usize_lt_of_machine_lt hrcond
+            change row.toNat < (4 : usize).toNat at this
+            have h4 : (4 : usize).toNat = 4 := rfl
+            rw [h4] at this; exact this
+          -- Write index: row + 4*col
+          -- First `(4 *? col)` for the +? in write index
+          apply bind_isOk_dep _ _
+            (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+          intro fc_w hfc_w
+          have hfc_w_val : fc_w.toNat = 4 * col.toNat := by
+            have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * col)) = _
+              rw [hnov_false]; rfl
+            have : fc_w = (4 : usize) * col := by
+              rw [heq] at hfc_w; exact (RustM.ok.inj hfc_w).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfc_w_lt : fc_w.toNat < 13 := by rw [hfc_w_val]; omega
+          -- row +? fc_w
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 13) row fc_w hrow hfc_w_lt (by decide))
+          intro idx_w hidx_w
+          have hidx_w_val : idx_w.toNat = row.toNat + fc_w.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fc_w.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fc_w.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fc_w) = .ok (row + fc_w) := by
+              show (if BitVec.uaddOverflow row.toBitVec fc_w.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fc_w)) = _
+              rw [hnov_false]; rfl
+            have : idx_w = row + fc_w := by
+              rw [heq] at hidx_w; exact (RustM.ok.inj hidx_w).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_w_lt : idx_w.toNat < 16 := by rw [hidx_w_val, hfc_w_val]; omega
+          -- Now compute read index: row + 4*((col+row) mod 4)
+          -- (col +? row)
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 4) col row hcol hrow (by decide))
+          intro cr hcr
+          have hcr_val : cr.toNat = col.toNat + row.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow col.toBitVec row.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow col.toBitVec row.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (col +? row) = .ok (col + row) := by
+              show (if BitVec.uaddOverflow col.toBitVec row.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (col + row)) = _
+              rw [hnov_false]; rfl
+            have : cr = col + row := by
+              rw [heq] at hcr; exact (RustM.ok.inj hcr).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hcr_lt : cr.toNat < 8 := by rw [hcr_val]; omega
+          -- cr %? 4
+          apply bind_isOk_dep _ _ (usize_mod_isOk cr (4 : usize) (by decide))
+          intro m hm
+          have hm_lt : m.toNat < 4 := by
+            have h4 : (4 : usize).toNat = 4 := rfl
+            have hne : (4 : usize) ≠ 0 := by decide
+            have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
+              show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero else pure (cr % (4 : usize))) = _
+              rw [if_neg hne]; rfl
+            rw [heq] at hm
+            have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
+            rw [this]
+            -- (cr % 4).toNat < 4
+            have hmod : (cr % (4 : usize)).toNat = cr.toNat % 4 := by
+              show (BitVec.umod cr.toBitVec (4 : usize).toBitVec).toNat = cr.toNat % 4
+              rfl
+            rw [hmod]
+            apply Nat.mod_lt
+            decide
+          -- 4 *? m
+          apply bind_isOk_dep _ _
+            (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) m (by decide) hm_lt (by decide))
+          intro fm hfm
+          have hfm_val : fm.toNat = 4 * m.toNat := by
+            have heq : ((4 : usize) *? m) = .ok ((4 : usize) * m) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * m)) = _
+              rw [hnov_false]; rfl
+            have : fm = (4 : usize) * m := by
+              rw [heq] at hfm; exact (RustM.ok.inj hfm).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfm_lt : fm.toNat < 13 := by rw [hfm_val]; omega
+          -- row +? fm
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 13) row fm hrow hfm_lt (by decide))
+          intro idx_r hidx_r
+          have hidx_r_val : idx_r.toNat = row.toNat + fm.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fm.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fm.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fm) = .ok (row + fm) := by
+              show (if BitVec.uaddOverflow row.toBitVec fm.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fm)) = _
+              rw [hnov_false]; rfl
+            have : idx_r = row + fm := by
+              rw [heq] at hidx_r; exact (RustM.ok.inj hidx_r).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_r_lt : idx_r.toNat < 16 := by rw [hidx_r_val, hfm_val]; omega
+          -- state[idx_r]
+          apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state idx_r hidx_r_lt)
+          intro v
+          -- update_at result idx_w v
+          apply bind_isOk_simple _ _
+            (update_at_usize_isOk res' idx_w.toNat v (by simpa using hidx_w_lt))
+          intro res2
+          -- row +? 1
+          apply bind_isOk_simple _ _ (usize_add_one_isOk_of_lt (N := 4) row hrow (by decide))
+          intro row'
+          rfl
+        · -- Invariant preservation: row.toNat ≤ 4
+          rintro ⟨res', row⟩ ⟨res'', row'⟩ _hrinv hrcond hrbody
+          simp only at hrcond hrbody
+          have hrow : row.toNat < 4 := by
+            have := usize_lt_of_machine_lt hrcond
+            change row.toNat < (4 : usize).toNat at this
+            have h4 : (4 : usize).toNat = 4 := rfl
+            rw [h4] at this; exact this
+          -- Walk through body to extract the final row+?1
+          have mul4_eq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+            have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+              rw [USize64.umulOverflow_iff]
+              have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+            have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                  then RustM.fail Error.integerOverflow
+                  else pure ((4 : usize) * col)) = _
+            rw [hnov_false]; rfl
+          have mul4_isOk : ((4 : usize) *? col).isOk = true := by rw [mul4_eq]
+          have mul4_toNat : ((4 : usize) * col).toNat = 4 * col.toNat := by
+            rw [USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          -- 1st (4*?col) — for write index
+          obtain ⟨fc_w, hfc_w, hfc_w_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+          rw [hfc_w_rw] at hrbody
+          have hfc_w_eq : fc_w = (4 : usize) * col := by
+            rw [mul4_eq] at hfc_w; exact (RustM.ok.inj hfc_w).symm
+          have hfc_w_val : fc_w.toNat = 4 * col.toNat := hfc_w_eq ▸ mul4_toNat
+          have hfc_w_lt : fc_w.toNat < 13 := by rw [hfc_w_val]; omega
+          have h_idxw : (row +? fc_w).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 13) row fc_w hrow hfc_w_lt (by decide)
+          obtain ⟨idx_w, hidx_w, hidx_w_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_idxw
+          rw [hidx_w_rw] at hrbody
+          have hidx_w_val : idx_w.toNat = row.toNat + fc_w.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fc_w.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fc_w.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fc_w) = .ok (row + fc_w) := by
+              show (if BitVec.uaddOverflow row.toBitVec fc_w.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fc_w)) = _
+              rw [hnov_false]; rfl
+            have : idx_w = row + fc_w := by
+              rw [heq] at hidx_w; exact (RustM.ok.inj hidx_w).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_w_lt : idx_w.toNat < 16 := by rw [hidx_w_val, hfc_w_val]; omega
+          -- (col +? row)
+          have h_cr : (col +? row).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 4) col row hcol hrow (by decide)
+          obtain ⟨cr, hcr, hcr_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_cr
+          rw [hcr_rw] at hrbody
+          have hcr_val : cr.toNat = col.toNat + row.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow col.toBitVec row.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow col.toBitVec row.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (col +? row) = .ok (col + row) := by
+              show (if BitVec.uaddOverflow col.toBitVec row.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (col + row)) = _
+              rw [hnov_false]; rfl
+            have : cr = col + row := by
+              rw [heq] at hcr; exact (RustM.ok.inj hcr).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          -- cr %? 4
+          have h_m : (cr %? (4 : usize)).isOk = true := usize_mod_isOk cr (4 : usize) (by decide)
+          obtain ⟨m, hm, hm_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_m
+          rw [hm_rw] at hrbody
+          have hm_lt : m.toNat < 4 := by
+            have hne : (4 : usize) ≠ 0 := by decide
+            have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
+              show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
+                    else pure (cr % (4 : usize))) = _
+              rw [if_neg hne]; rfl
+            rw [heq] at hm
+            have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
+            rw [this]
+            have hmod : (cr % (4 : usize)).toNat = cr.toNat % 4 := by
+              show (BitVec.umod cr.toBitVec (4 : usize).toBitVec).toNat = cr.toNat % 4
+              rfl
+            rw [hmod]
+            apply Nat.mod_lt; decide
+          -- 4 *? m
+          have h_fm : ((4 : usize) *? m).isOk = true :=
+            usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) m (by decide) hm_lt (by decide)
+          obtain ⟨fm, hfm, hfm_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_fm
+          rw [hfm_rw] at hrbody
+          have hfm_val : fm.toNat = 4 * m.toNat := by
+            have heq : ((4 : usize) *? m) = .ok ((4 : usize) * m) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * m)) = _
+              rw [hnov_false]; rfl
+            have : fm = (4 : usize) * m := by
+              rw [heq] at hfm; exact (RustM.ok.inj hfm).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfm_lt : fm.toNat < 13 := by rw [hfm_val]; omega
+          -- row +? fm
+          have h_idxr : (row +? fm).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 13) row fm hrow hfm_lt (by decide)
+          obtain ⟨idx_r, hidx_r, hidx_r_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_idxr
+          rw [hidx_r_rw] at hrbody
+          have hidx_r_val : idx_r.toNat = row.toNat + fm.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fm.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fm.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fm) = .ok (row + fm) := by
+              show (if BitVec.uaddOverflow row.toBitVec fm.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fm)) = _
+              rw [hnov_false]; rfl
+            have : idx_r = row + fm := by
+              rw [heq] at hidx_r; exact (RustM.ok.inj hidx_r).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_r_lt : idx_r.toNat < 16 := by rw [hidx_r_val, hfm_val]; omega
+          -- state[idx_r]
+          have h_v : (state[idx_r]_? : RustM UInt8).isOk = true :=
+            vector_getElem_usize_isOk state idx_r hidx_r_lt
+          obtain ⟨v, _, hv_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_v
+          rw [hv_rw] at hrbody
+          -- update_at res' idx_w v
+          have h_upd :
+              (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res' idx_w.toNat v).isOk
+                = true :=
+            update_at_usize_isOk res' idx_w.toNat v (by simpa using hidx_w_lt)
+          obtain ⟨res_new, _, hres_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_upd
+          rw [hres_new_rw] at hrbody
+          -- row +? 1
+          have h_row1 : (row +? (1 : usize)).isOk = true :=
+            usize_add_one_isOk_of_lt (N := 4) row hrow (by decide)
+          obtain ⟨row_new, hrow_new_eq, hrow_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_row1
+          rw [hrow_new_rw] at hrbody
+          have hpair : (Rust_primitives.Hax.Tuple2.mk res_new row_new
+                         : Rust_primitives.Hax.Tuple2 _ _) =
+                       Rust_primitives.Hax.Tuple2.mk res'' row' := RustM.ok.inj hrbody
+          have hrow'eq : row_new = row' := by injection hpair
+          show row'.toNat ≤ 4
+          rw [← hrow'eq]
+          have : row_new.toNat = row.toNat + 1 :=
+            usize_add_one_toNat (N := 4) row row_new hrow (by decide) hrow_new_eq
+          rw [this]; omega
+        · show (0 : usize).toNat ≤ 4; decide
+      intro p
+      -- After inner loop: `let col ← col +? 1; pure ⟨col, result⟩`
+      obtain ⟨resI, _rowI⟩ := p
+      simp only
+      apply bind_isOk_simple _ _ (usize_add_one_isOk_of_lt (N := 4) col hcol (by decide))
+      intro col'
+      rfl
+    · -- Invariant preservation for outer
+      rintro ⟨col, res⟩ ⟨col', res'⟩ _hinv hcond hbody
+      simp only at hcond hbody
+      have hcol : col.toNat < 4 := by
+        have := usize_lt_of_machine_lt hcond
+        change col.toNat < (4 : usize).toNat at this
+        have h4 : (4 : usize).toNat = 4 := rfl
+        rw [h4] at this; exact this
+      -- Body of outer loop: inner-while-result then col +? 1
+      -- The inner while result is some `⟨resI, rowI⟩`; we don't need to walk inside it,
+      -- only know it succeeds (which we proved above). Then the col +? 1 step gives us col + 1.
+      have hinner_isOk :
+          (Rust_primitives.Hax.while_loop'
+            (fun (p : Rust_primitives.Hax.Tuple2 (RustArray u8 16) usize) =>
+              (do (pure true) : RustM Bool))
+            (fun ⟨_, row⟩ =>
+              (do (Rust_primitives.Hax.Machine_int.lt row (4 : usize)) : RustM Bool))
+            (fun _ =>
+              (do
+              (Rust_primitives.Hax.Int.from_machine (0 : u32)) :
+              RustM Hax_lib.Int.Int))
+            (Rust_primitives.Hax.Tuple2.mk res (0 : usize))
+            (fun ⟨result, row⟩ =>
+              (do
+              let result : (RustArray u8 16) ←
+                (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+                  result
+                  (← (row +? (← ((4 : usize) *? col))))
+                  (← state[
+                    (← (row
+                      +? (← ((4 : usize)
+                        *? (← ((← (col +? row)) %? (4 : usize)))))))
+                    ]_?));
+              let row : usize ← (row +? (1 : usize));
+              (pure (Rust_primitives.Hax.Tuple2.mk result row)) :
+              RustM (Rust_primitives.Hax.Tuple2 (RustArray u8 16) usize)))).isOk = true := by
+        refine while_loop'_isOk_inv
+          (inv := fun p => p._1.toNat ≤ 4) _ _ _ _ _ ?_ ?_ ?_ ?_
+        · rintro ⟨_, row⟩ _; rfl
+        · -- Same body-IsOk as before. Re-prove it.
+          rintro ⟨res', row⟩ _hrinv hrcond
+          simp only at hrcond ⊢
+          have hrow : row.toNat < 4 := by
+            have := usize_lt_of_machine_lt hrcond
+            change row.toNat < (4 : usize).toNat at this
+            have h4 : (4 : usize).toNat = 4 := rfl
+            rw [h4] at this; exact this
+          -- Walk through body (same as above)
+          apply bind_isOk_dep _ _
+            (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) col (by decide) hcol (by decide))
+          intro fc_w hfc_w
+          have hfc_w_val : fc_w.toNat = 4 * col.toNat := by
+            have heq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * col)) = _
+              rw [hnov_false]; rfl
+            have : fc_w = (4 : usize) * col := by
+              rw [heq] at hfc_w; exact (RustM.ok.inj hfc_w).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfc_w_lt : fc_w.toNat < 13 := by rw [hfc_w_val]; omega
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 13) row fc_w hrow hfc_w_lt (by decide))
+          intro idx_w hidx_w
+          have hidx_w_val : idx_w.toNat = row.toNat + fc_w.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fc_w.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fc_w.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fc_w) = .ok (row + fc_w) := by
+              show (if BitVec.uaddOverflow row.toBitVec fc_w.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fc_w)) = _
+              rw [hnov_false]; rfl
+            have : idx_w = row + fc_w := by
+              rw [heq] at hidx_w; exact (RustM.ok.inj hidx_w).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_w_lt : idx_w.toNat < 16 := by rw [hidx_w_val, hfc_w_val]; omega
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 4) col row hcol hrow (by decide))
+          intro cr hcr
+          have hcr_val : cr.toNat = col.toNat + row.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow col.toBitVec row.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow col.toBitVec row.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (col +? row) = .ok (col + row) := by
+              show (if BitVec.uaddOverflow col.toBitVec row.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (col + row)) = _
+              rw [hnov_false]; rfl
+            have : cr = col + row := by
+              rw [heq] at hcr; exact (RustM.ok.inj hcr).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          apply bind_isOk_dep _ _ (usize_mod_isOk cr (4 : usize) (by decide))
+          intro m hm
+          have hm_lt : m.toNat < 4 := by
+            have hne : (4 : usize) ≠ 0 := by decide
+            have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
+              show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
+                    else pure (cr % (4 : usize))) = _
+              rw [if_neg hne]; rfl
+            rw [heq] at hm
+            have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
+            rw [this]
+            have hmod : (cr % (4 : usize)).toNat = cr.toNat % 4 := by
+              show (BitVec.umod cr.toBitVec (4 : usize).toBitVec).toNat = cr.toNat % 4
+              rfl
+            rw [hmod]; apply Nat.mod_lt; decide
+          apply bind_isOk_dep _ _
+            (usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) m (by decide) hm_lt (by decide))
+          intro fm hfm
+          have hfm_val : fm.toNat = 4 * m.toNat := by
+            have heq : ((4 : usize) *? m) = .ok ((4 : usize) * m) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * m)) = _
+              rw [hnov_false]; rfl
+            have : fm = (4 : usize) * m := by
+              rw [heq] at hfm; exact (RustM.ok.inj hfm).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfm_lt : fm.toNat < 13 := by rw [hfm_val]; omega
+          apply bind_isOk_dep _ _
+            (usize_add_isOk_of_lt (N := 4) (M := 13) row fm hrow hfm_lt (by decide))
+          intro idx_r hidx_r
+          have hidx_r_val : idx_r.toNat = row.toNat + fm.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fm.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fm.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fm) = .ok (row + fm) := by
+              show (if BitVec.uaddOverflow row.toBitVec fm.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fm)) = _
+              rw [hnov_false]; rfl
+            have : idx_r = row + fm := by
+              rw [heq] at hidx_r; exact (RustM.ok.inj hidx_r).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_r_lt : idx_r.toNat < 16 := by rw [hidx_r_val, hfm_val]; omega
+          apply bind_isOk_simple _ _ (vector_getElem_usize_isOk state idx_r hidx_r_lt)
+          intro v
+          apply bind_isOk_simple _ _
+            (update_at_usize_isOk res' idx_w.toNat v (by simpa using hidx_w_lt))
+          intro res2
+          apply bind_isOk_simple _ _ (usize_add_one_isOk_of_lt (N := 4) row hrow (by decide))
+          intro row'
+          rfl
+        · -- Inner inv preservation (same proof as above, simplified)
+          rintro ⟨res', row⟩ ⟨res'', row'⟩ _hrinv hrcond hrbody
+          simp only at hrcond hrbody
+          have hrow : row.toNat < 4 := by
+            have := usize_lt_of_machine_lt hrcond
+            change row.toNat < (4 : usize).toNat at this
+            have h4 : (4 : usize).toNat = 4 := rfl
+            rw [h4] at this; exact this
+          -- Extract row+?1 witness directly without walking the whole body
+          -- We use that the body has shape `do ...; let row_new ← row +? 1; pure ⟨_, row_new⟩`.
+          -- Walk through all the steps in hrbody to peel off everything before row+?1.
+          have mul4_eq : ((4 : usize) *? col) = .ok ((4 : usize) * col) := by
+            have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec := by
+              rw [USize64.umulOverflow_iff]
+              have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+            have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            show (if BitVec.umulOverflow (4 : usize).toBitVec col.toBitVec
+                  then RustM.fail Error.integerOverflow
+                  else pure ((4 : usize) * col)) = _
+            rw [hnov_false]; rfl
+          have mul4_isOk : ((4 : usize) *? col).isOk = true := by rw [mul4_eq]
+          have mul4_toNat : ((4 : usize) * col).toNat = 4 * col.toNat := by
+            rw [USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          obtain ⟨fc_w, hfc_w, hfc_w_rw⟩ := bind_eq_of_isOk _ (fun _ => _) mul4_isOk
+          rw [hfc_w_rw] at hrbody
+          have hfc_w_eq : fc_w = (4 : usize) * col := by
+            rw [mul4_eq] at hfc_w; exact (RustM.ok.inj hfc_w).symm
+          have hfc_w_val : fc_w.toNat = 4 * col.toNat := hfc_w_eq ▸ mul4_toNat
+          have hfc_w_lt : fc_w.toNat < 13 := by rw [hfc_w_val]; omega
+          have h_idxw : (row +? fc_w).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 13) row fc_w hrow hfc_w_lt (by decide)
+          obtain ⟨idx_w, hidx_w, hidx_w_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_idxw
+          rw [hidx_w_rw] at hrbody
+          have hidx_w_val : idx_w.toNat = row.toNat + fc_w.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fc_w.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fc_w.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fc_w) = .ok (row + fc_w) := by
+              show (if BitVec.uaddOverflow row.toBitVec fc_w.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fc_w)) = _
+              rw [hnov_false]; rfl
+            have : idx_w = row + fc_w := by
+              rw [heq] at hidx_w; exact (RustM.ok.inj hidx_w).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_w_lt : idx_w.toNat < 16 := by rw [hidx_w_val, hfc_w_val]; omega
+          have h_cr : (col +? row).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 4) col row hcol hrow (by decide)
+          obtain ⟨cr, hcr, hcr_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_cr
+          rw [hcr_rw] at hrbody
+          have hcr_val : cr.toNat = col.toNat + row.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow col.toBitVec row.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow col.toBitVec row.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (col +? row) = .ok (col + row) := by
+              show (if BitVec.uaddOverflow col.toBitVec row.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (col + row)) = _
+              rw [hnov_false]; rfl
+            have : cr = col + row := by
+              rw [heq] at hcr; exact (RustM.ok.inj hcr).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have h_m : (cr %? (4 : usize)).isOk = true := usize_mod_isOk cr (4 : usize) (by decide)
+          obtain ⟨m, hm, hm_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_m
+          rw [hm_rw] at hrbody
+          have hm_lt : m.toNat < 4 := by
+            have hne : (4 : usize) ≠ 0 := by decide
+            have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
+              show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
+                    else pure (cr % (4 : usize))) = _
+              rw [if_neg hne]; rfl
+            rw [heq] at hm
+            have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
+            rw [this]
+            have hmod : (cr % (4 : usize)).toNat = cr.toNat % 4 := by
+              show (BitVec.umod cr.toBitVec (4 : usize).toBitVec).toNat = cr.toNat % 4
+              rfl
+            rw [hmod]; apply Nat.mod_lt; decide
+          have h_fm : ((4 : usize) *? m).isOk = true :=
+            usize_mul_isOk_of_lt (N := 5) (M := 4) (4 : usize) m (by decide) hm_lt (by decide)
+          obtain ⟨fm, hfm, hfm_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_fm
+          rw [hfm_rw] at hrbody
+          have hfm_val : fm.toNat = 4 * m.toNat := by
+            have heq : ((4 : usize) *? m) = .ok ((4 : usize) * m) := by
+              have hnov : ¬ BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec := by
+                rw [USize64.umulOverflow_iff]
+                have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+              have hnov_false : BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec = false :=
+                Bool.eq_false_iff.mpr hnov
+              show (if BitVec.umulOverflow (4 : usize).toBitVec m.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure ((4 : usize) * m)) = _
+              rw [hnov_false]; rfl
+            have : fm = (4 : usize) * m := by
+              rw [heq] at hfm; exact (RustM.ok.inj hfm).symm
+            rw [this, USize64.toNat_mul_of_lt]
+            · rfl
+            · have h4 : (4 : usize).toNat = 4 := rfl; rw [h4]; omega
+          have hfm_lt : fm.toNat < 13 := by rw [hfm_val]; omega
+          have h_idxr : (row +? fm).isOk = true :=
+            usize_add_isOk_of_lt (N := 4) (M := 13) row fm hrow hfm_lt (by decide)
+          obtain ⟨idx_r, hidx_r, hidx_r_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_idxr
+          rw [hidx_r_rw] at hrbody
+          have hidx_r_val : idx_r.toNat = row.toNat + fm.toNat := by
+            have hnov : ¬ BitVec.uaddOverflow row.toBitVec fm.toBitVec := by
+              rw [USize64.uaddOverflow_iff]; omega
+            have hnov_false : BitVec.uaddOverflow row.toBitVec fm.toBitVec = false :=
+              Bool.eq_false_iff.mpr hnov
+            have heq : (row +? fm) = .ok (row + fm) := by
+              show (if BitVec.uaddOverflow row.toBitVec fm.toBitVec
+                    then RustM.fail Error.integerOverflow
+                    else pure (row + fm)) = _
+              rw [hnov_false]; rfl
+            have : idx_r = row + fm := by
+              rw [heq] at hidx_r; exact (RustM.ok.inj hidx_r).symm
+            rw [this, USize64.toNat_add_of_lt (by omega)]
+          have hidx_r_lt : idx_r.toNat < 16 := by rw [hidx_r_val, hfm_val]; omega
+          have h_v : (state[idx_r]_? : RustM UInt8).isOk = true :=
+            vector_getElem_usize_isOk state idx_r hidx_r_lt
+          obtain ⟨v, _, hv_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_v
+          rw [hv_rw] at hrbody
+          have h_upd :
+              (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize res' idx_w.toNat v).isOk
+                = true :=
+            update_at_usize_isOk res' idx_w.toNat v (by simpa using hidx_w_lt)
+          obtain ⟨res_new, _, hres_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_upd
+          rw [hres_new_rw] at hrbody
+          have h_row1 : (row +? (1 : usize)).isOk = true :=
+            usize_add_one_isOk_of_lt (N := 4) row hrow (by decide)
+          obtain ⟨row_new, hrow_new_eq, hrow_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_row1
+          rw [hrow_new_rw] at hrbody
+          have hpair : (Rust_primitives.Hax.Tuple2.mk res_new row_new
+                         : Rust_primitives.Hax.Tuple2 _ _) =
+                       Rust_primitives.Hax.Tuple2.mk res'' row' := RustM.ok.inj hrbody
+          have hrow'eq : row_new = row' := by injection hpair
+          show row'.toNat ≤ 4
+          rw [← hrow'eq]
+          have : row_new.toNat = row.toNat + 1 :=
+            usize_add_one_toNat (N := 4) row row_new hrow (by decide) hrow_new_eq
+          rw [this]; omega
+        · show (0 : usize).toNat ≤ 4; decide
+      -- Walk through the outer body: inner-while-result then `col +? 1`
+      obtain ⟨p, _, hp_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hinner_isOk
+      rw [hp_rw] at hbody
+      -- hbody is now `(do let col ← col +? 1; pure ⟨col, p._0⟩) = .ok ⟨col', res'⟩`
+      have h_col1 : (col +? (1 : usize)).isOk = true :=
+        usize_add_one_isOk_of_lt (N := 4) col hcol (by decide)
+      obtain ⟨col_new, hcol_new_eq, hcol_new_rw⟩ := bind_eq_of_isOk _ (fun _ => _) h_col1
+      rw [hcol_new_rw] at hbody
+      have hpair : (Rust_primitives.Hax.Tuple2.mk col_new p._0
+                     : Rust_primitives.Hax.Tuple2 _ _) =
+                   Rust_primitives.Hax.Tuple2.mk col' res' := RustM.ok.inj hbody
+      have hcol'eq : col_new = col' := by injection hpair
+      show col'.toNat ≤ 4
+      rw [← hcol'eq]
+      have : col_new.toNat = col.toNat + 1 :=
+        usize_add_one_toNat (N := 4) col col_new hcol (by decide) hcol_new_eq
+      rw [this]; omega
+    · show (0 : usize).toNat ≤ 4; decide
+  rintro ⟨_, _⟩
+  rfl
 
 /-
 INCOMPLETE PROOF ATTEMPT (reference only).
