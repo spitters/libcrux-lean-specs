@@ -71,8 +71,12 @@ fn build_ghash_input(aad: &[u8], ciphertext: &[u8]) -> Vec<u8> {
     }
 
     // Length block: [len(A) in bits as u64 BE] || [len(C) in bits as u64 BE]
-    let aad_bits = (aad.len() as u64) * 8;
-    let ct_bits = (ciphertext.len() as u64) * 8;
+    // Cast to u128 first so the * 8 cannot overflow for any usize input;
+    // truncate back to u64 because GHASH's length encoding is per-field
+    // 64-bit (NIST SP 800-38D §6.5). For valid AES-GCM inputs (each ≤ 2^61
+    // bytes per NIST limits), the truncation is lossless.
+    let aad_bits = ((aad.len() as u128) * 8) as u64;
+    let ct_bits = ((ciphertext.len() as u128) * 8) as u64;
     let aad_len_bytes = aad_bits.to_be_bytes();
     let ct_len_bytes = ct_bits.to_be_bytes();
     i = 0;

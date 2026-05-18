@@ -154,7 +154,12 @@ pub fn compress(block: &[u8; 64], h_in: [u32; 8]) -> [u32; 8] {
 pub fn sha256(msg: &[u8]) -> [u8; 32] {
     let mut h = HASH_INIT;
     let msg_len = msg.len();
-    let bit_len = (msg_len as u64) * 8;
+    // Cast to u128 first so the * 8 cannot overflow for any usize input;
+    // truncate back to u64 because the SHA-256 length field is 64-bit
+    // per FIPS 180-4. For valid inputs (msg_len < 2^61), the truncation
+    // is lossless. Matches sha512.rs which already uses u128 (with a
+    // 128-bit length field).
+    let bit_len = ((msg_len as u128) * 8) as u64;
 
     // Process complete 64-byte blocks
     let num_full_blocks = msg_len / 64;

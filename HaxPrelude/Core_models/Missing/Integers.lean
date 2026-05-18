@@ -301,27 +301,32 @@ checked arithmetic operators (+?, -?, *?, etc.)
 @[reducible] instance : Core_models.Ops.Arith.Neg.AssociatedTypes u128 where
   Output := u128
 
-instance : Core_models.Ops.Arith.Add u128 u128 where
+-- Named so downstream panic-freedom proofs can `unfold HaxPrelude.instAddU128`
+-- (or use `simp only [HaxPrelude.instAddU128]`) to expose the if-then-else
+-- and discharge the `IsOk` obligation. Anonymous instances make this
+-- impossible — see PanicFree.lean P-256 leaves which were blocked on
+-- this very issue.
+instance instAddU128 : Core_models.Ops.Arith.Add u128 u128 where
   add x y :=
     if BitVec.uaddOverflow x y then .fail .integerOverflow
     else pure (x + y)
 
-instance : Core_models.Ops.Arith.Sub u128 u128 where
+instance instSubU128 : Core_models.Ops.Arith.Sub u128 u128 where
   sub x y :=
     if BitVec.usubOverflow x y then .fail .integerOverflow
     else pure (x - y)
 
-instance : Core_models.Ops.Arith.Mul u128 u128 where
+instance instMulU128 : Core_models.Ops.Arith.Mul u128 u128 where
   mul x y :=
     if BitVec.umulOverflow x y then .fail .integerOverflow
     else pure (x * y)
 
-instance : Core_models.Ops.Arith.Div u128 u128 where
+instance instDivU128 : Core_models.Ops.Arith.Div u128 u128 where
   div x y :=
     if y = 0 then .fail .divisionByZero
     else pure (x / y)
 
-instance : Core_models.Ops.Arith.Rem u128 u128 where
+instance instRemU128 : Core_models.Ops.Arith.Rem u128 u128 where
   rem x y :=
     if y = 0 then .fail .divisionByZero
     else pure (x % y)
