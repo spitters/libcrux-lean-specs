@@ -228,6 +228,19 @@ theorem sha256_sigma1_isOk (x : UInt32) :
     is left as a starting point. -/
 theorem sha256_schedule_isOk (block : Vector UInt8 64) :
     (Libcrux_specs.Sha256.schedule block).isOk = true := by
+  sorry
+
+/-
+ATTEMPTED — switch to a `bind_isOk` strategy that handles fresh `4 *? i`
+evaluations per block-index in the `from_be_bytes #v[...]` vector literal.
+
+UPDATE (SHA agent 2026-05-18): under Lean 4.29.1 the hax-extracted form
+unfolds `+?`/`*?` to `Add.add (Mul.AssociatedTypes.Output usize usize) usize`,
+and `bind_isOk_dep` cannot unify the first type arg against the helper's
+`(_ +? _).isOk` (which has `Add.add usize usize`). The body below was correct
+under older typeclass resolution; rewrite to use the `bind_eq_of_isOk` walk
+pattern (see `aes_encrypt_rounds_isOk` invariant-preservation step in
+`PanicFree.lean` for the canonical walk-forward template).
   unfold Libcrux_specs.Sha256.schedule
   -- Step 1: `repeat 0 64 : Vector u32 64`
   apply LibcruxSpecs.PanicFree.bind_isOk_simple
@@ -461,6 +474,8 @@ theorem sha256_schedule_isOk (block : Vector UInt8 64) :
     exact LibcruxSpecs.PanicFree.update_at_usize_isOk w i.toNat w_i (by simpa using hi_hi)
   intro _w2
   rfl
+END ATTEMPTED
+-/
 
 /-- `compress` (SHA-256 block-compression on a 64-byte block and 8-word state)
     is unconditionally `IsOk`. After `schedule block` succeeds (giving `w : Vector u32 64`),
@@ -875,68 +890,67 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
           apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _
             (LibcruxSpecs.PanicFree.machine_int_eq_isOk j (0 : usize))
           intro beq _hbeq_eq
-          -- The if-then-else then `j +? 1` then `pure ⟨j', rk'⟩`.
-          apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-          · -- Both branches yield (update_at … >>= fun _ => pure rk').isOk.
-            cases beq with
-            | true =>
-              -- prev[j]_?
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega))
-              intro pj
-              -- pj ^^^? sbox_out
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.xor_u8_isOk pj sbox_out)
-              intro w
-              -- round -? 1
-              apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ hsub
-              intro rm1 hrm1_eq
-              have hrm1_val : rm1.toNat = round.toNat - 1 := by
-                have hnov : ¬ BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec := by
-                  simp [BitVec.usubOverflow]; omega
-                have : (round -? (1 : usize)) = .ok (round - (1 : usize)) := by
-                  show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
-                        then RustM.fail Error.integerOverflow
-                        else pure (round - (1 : usize))) = _
-                  rw [if_neg hnov]; rfl
-                rw [this] at hrm1_eq
-                have heq : rm1 = round - (1 : usize) := (RustM.ok.inj hrm1_eq).symm
-                rw [heq, USize64.toNat_sub_of_le']
-                · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]
-                · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]; exact hround_lo'
-              have hrm1_lt : rm1.toNat < 10 := by rw [hrm1_val]; omega
-              -- RCON[rm1]_?
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk Libcrux_specs.Aes.RCON rm1 hrm1_lt)
-              intro rcv
-              -- w ^^^? rcv
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.xor_u8_isOk w rcv)
-              intro xored
-              -- update_at rk j xored
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.update_at_usize_isOk rk j.toNat xored
-                  (by simpa using (by omega : j.toNat < 16)))
-              intro _rk_new
-              rfl
-            | false =>
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega))
-              intro pj
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.xor_u8_isOk pj sbox_out)
-              intro w
-              apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-                (LibcruxSpecs.PanicFree.update_at_usize_isOk rk j.toNat w
-                  (by simpa using (by omega : j.toNat < 16)))
-              intro _rk_new
-              rfl
-          intro _rk_after
-          -- j +? 1
-          apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
-            (LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 4) j hj_lt (by decide))
-          intro _j_new
-          rfl
+          -- The if-then-else: both branches end with `; let j ← j+?1; pure {j, y}`.
+          cases beq with
+          | true =>
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega))
+            intro pj
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.xor_u8_isOk pj sbox_out)
+            intro w
+            apply LibcruxSpecs.PanicFree.bind_isOk_dep _ _ hsub
+            intro rm1 hrm1_eq
+            have hrm1_val : rm1.toNat = round.toNat - 1 := by
+              have hnov : ¬ BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec := by
+                simp [BitVec.usubOverflow]; omega
+              have : (round -? (1 : usize)) = .ok (round - (1 : usize)) := by
+                show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
+                      then RustM.fail Error.integerOverflow
+                      else pure (round - (1 : usize))) = _
+                rw [if_neg hnov]; rfl
+              rw [this] at hrm1_eq
+              have heq : rm1 = round - (1 : usize) := (RustM.ok.inj hrm1_eq).symm
+              rw [heq, USize64.toNat_sub_of_le']
+              · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]
+              · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]; exact hround_lo'
+            have hrm1_lt : rm1.toNat < 10 := by rw [hrm1_val]; omega
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk Libcrux_specs.Aes.RCON rm1 hrm1_lt)
+            intro rcv
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.xor_u8_isOk w rcv)
+            intro xored
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.update_at_usize_isOk rk j.toNat xored
+                (by simpa using (by omega : j.toNat < 16)))
+            intro _rk_new
+            -- `let y ← pure rk; let j ← j +? 1; pure {j, y}`
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (by show (pure _rk_new : RustM (RustArray u8 16)).isOk = true; rfl)
+            intro _y
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 4) j hj_lt (by decide))
+            intro _j_new
+            rfl
+          | false =>
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega))
+            intro pj
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.xor_u8_isOk pj sbox_out)
+            intro w
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.update_at_usize_isOk rk j.toNat w
+                (by simpa using (by omega : j.toNat < 16)))
+            intro _rk_new
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (by show (pure _rk_new : RustM (RustArray u8 16)).isOk = true; rfl)
+            intro _y
+            apply LibcruxSpecs.PanicFree.bind_isOk_simple _ _
+              (LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 4) j hj_lt (by decide))
+            intro _j_new
+            rfl
         · -- Invariant preservation for inner-loop-1
           rintro ⟨j, rk⟩ ⟨j', rk'⟩ _hinv hcond_j hbody_j
           simp only at hcond_j hbody_j
@@ -1819,7 +1833,116 @@ trivial `bind` chains through these. -/
       `i'.toNat = (i-1).toNat ≤ 3 ≤ 4`. -/
 private theorem add256_isOk (a b : Vector UInt64 4) :
     (Libcrux_specs.P256.add256 a b).isOk = true := by
-  sorry  -- TODO: while_loop'_isOk_inv with i.toNat ≤ 4 ∧ carry.toNat ≤ 1
+  unfold Libcrux_specs.P256.add256
+  apply bind_isOk_dep _ _ (repeat_isOk _ _ rfl)
+  intro r0 _
+  apply bind_isOk_simple
+  · refine while_loop'_isOk_inv
+      (inv := fun p => p._1.toNat ≤ 4) _ _ _ _ _ ?_ ?_ ?_ ?_
+    · rintro ⟨_, _, _⟩ _; rfl
+    · rintro ⟨carry, i, r⟩ hinv hcond
+      simp only at hinv hcond ⊢
+      have hi_pos : 0 < i.toNat := by
+        have := usize_gt_of_machine_gt hcond
+        change (0 : usize).toNat < i.toNat at this
+        have h0 : (0 : usize).toNat = 0 := rfl
+        rw [h0] at this; exact this
+      have hi_sub_isOk : (i -? (1 : usize)).isOk = true :=
+        usize_sub_isOk i (1 : usize)
+          (by have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]; omega)
+      apply bind_isOk_dep _ _ hi_sub_isOk
+      intro i1 hi1_eq
+      have hi1_lt : i1.toNat < 4 := by
+        have hi1_val : i1.toNat = i.toNat - 1 := usize_sub_one_toNat i i1 hi_pos hi1_eq
+        omega
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk a i1 hi1_lt)
+      intro av
+      apply bind_isOk_simple _ _
+        (by rfl : (Rust_primitives.Hax.cast_op (β := u128) av : RustM u128).isOk = true)
+      intro av128
+      apply bind_isOk_simple _ _ (vector_getElem_usize_isOk b i1 hi1_lt)
+      intro bv
+      apply bind_isOk_simple _ _
+        (by rfl : (Rust_primitives.Hax.cast_op (β := u128) bv : RustM u128).isOk = true)
+      intro bv128
+      apply bind_isOk_simple _ _
+        (by rfl : ((av128 +? bv128) : RustM u128).isOk = true)
+      intro sum
+      apply bind_isOk_simple _ _
+        (by rfl : ((sum +? carry) : RustM u128).isOk = true)
+      intro s
+      apply bind_isOk_simple _ _
+        (by rfl : (Rust_primitives.Hax.cast_op (β := u64) s : RustM u64).isOk = true)
+      intro s64
+      apply bind_isOk_simple _ _
+        (update_at_usize_isOk r i1.toNat s64 (by simpa using hi1_lt))
+      intro r'
+      apply bind_isOk_simple _ _
+        (u128_shr_i32_isOk s (64 : i32) (by decide) (by decide))
+      intro _
+      rfl
+    · rintro ⟨carry, i, r⟩ ⟨carry', i', r'⟩ hinv hcond hbody
+      simp only at hinv hcond hbody
+      have hi_pos : 0 < i.toNat := by
+        have := usize_gt_of_machine_gt hcond
+        change (0 : usize).toNat < i.toNat at this
+        have h0 : (0 : usize).toNat = 0 := rfl
+        rw [h0] at this; exact this
+      have hi_sub_isOk : (i -? (1 : usize)).isOk = true :=
+        usize_sub_isOk i (1 : usize)
+          (by have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]; omega)
+      obtain ⟨i1, hi1_eq, hi1_rw⟩ := bind_eq_of_isOk _ (fun ix => _) hi_sub_isOk
+      rw [hi1_rw] at hbody
+      have hi1_lt : i1.toNat < 4 := by
+        have hi1_val : i1.toNat = i.toNat - 1 := usize_sub_one_toNat i i1 hi_pos hi1_eq
+        omega
+      have ha_isOk : (a[i1]_? : RustM UInt64).isOk = true :=
+        vector_getElem_usize_isOk a i1 hi1_lt
+      obtain ⟨av, _, hav_rw⟩ := bind_eq_of_isOk _ (fun _ => _) ha_isOk
+      rw [hav_rw] at hbody
+      have hav128_isOk : (Rust_primitives.Hax.cast_op (β := u128) av : RustM u128).isOk = true := rfl
+      obtain ⟨av128, _, hav128_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hav128_isOk
+      rw [hav128_rw] at hbody
+      have hb_isOk : (b[i1]_? : RustM UInt64).isOk = true :=
+        vector_getElem_usize_isOk b i1 hi1_lt
+      obtain ⟨bv, _, hbv_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hb_isOk
+      rw [hbv_rw] at hbody
+      have hbv128_isOk : (Rust_primitives.Hax.cast_op (β := u128) bv : RustM u128).isOk = true := rfl
+      obtain ⟨bv128, _, hbv128_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hbv128_isOk
+      rw [hbv128_rw] at hbody
+      have hsum_isOk : ((av128 +? bv128) : RustM u128).isOk = true := rfl
+      obtain ⟨sum, _, hsum_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hsum_isOk
+      rw [hsum_rw] at hbody
+      have hs_isOk : ((sum +? carry) : RustM u128).isOk = true := rfl
+      obtain ⟨s, _, hs_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hs_isOk
+      rw [hs_rw] at hbody
+      have hs64_isOk : (Rust_primitives.Hax.cast_op (β := u64) s : RustM u64).isOk = true := rfl
+      obtain ⟨s64, _, hs64_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hs64_isOk
+      rw [hs64_rw] at hbody
+      have hupd_isOk : (Rust_primitives.Hax.Monomorphized_update_at.update_at_usize
+                          r i1 s64).isOk = true :=
+        update_at_usize_isOk r i1.toNat s64 (by simpa using hi1_lt)
+      obtain ⟨rnew, _, hupd_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hupd_isOk
+      rw [hupd_rw] at hbody
+      have hshr_isOk : ((s >>>? (64 : i32)) : RustM u128).isOk = true :=
+        u128_shr_i32_isOk s (64 : i32) (by decide) (by decide)
+      obtain ⟨cnew, _, hshr_rw⟩ := bind_eq_of_isOk _ (fun _ => _) hshr_isOk
+      rw [hshr_rw] at hbody
+      have hpair : (Rust_primitives.Hax.Tuple3.mk cnew i1 rnew
+                     : Rust_primitives.Hax.Tuple3 u128 usize (Vector UInt64 4)) =
+                   Rust_primitives.Hax.Tuple3.mk carry' i' r' := RustM.ok.inj hbody
+      have hi'eq : i1 = i' := by
+        have := congrArg Rust_primitives.Hax.Tuple3._1 hpair
+        exact this
+      show i'.toNat ≤ 4
+      rw [← hi'eq]; omega
+    · show (4 : usize).toNat ≤ 4
+      decide
+  rintro ⟨_, _, _⟩
+  apply bind_isOk_simple _ _
+    (by rfl : (Rust_primitives.Hax.cast_op (β := u64) _ : RustM u64).isOk = true)
+  intro _
+  rfl
 
 /-- `sub256` (256-bit subtraction) never panics. Same shape as `add256_isOk`:
     single `while_loop'` with counter `i : usize` decrementing 4→0,
