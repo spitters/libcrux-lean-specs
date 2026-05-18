@@ -83,6 +83,16 @@ theorem RustM.bind_isOk {α β : Type} (x : RustM α) (f : α → RustM β)
   match x, hx with
   | .ok v, _ => exact hf v rfl
 
+/-- If a bind chain produces `.ok v`, then the LHS produced `.ok` too.
+    Useful for "back-walking" a chain where we only have the equation
+    `(x >>= f) = .ok v` (not `x.isOk = true` directly). -/
+theorem RustM.bind_isOk_of_eq {α β : Type} (x : RustM α) (f : α → RustM β) (v : β)
+    (h : (x >>= f) = .ok v) : x.isOk = true := by
+  match x with
+  | .ok _ => rfl
+  | .fail _ => simp [bind, RustM.bind] at h
+  | .div => simp [bind, RustM.bind] at h
+
 /-- Variant: if `x` succeeds and `f` succeeds on ALL inputs, then `x >>= f` succeeds. -/
 theorem RustM.bind_isOk' {α β : Type} (x : RustM α) (f : α → RustM β)
     (hx : x.isOk = true) (hf : ∀ a, (f a).isOk = true) :
@@ -1317,16 +1327,46 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
       obtain ⟨v12, _, h_v12_rw⟩ :=
         LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_v12
       rw [h_v12_rw] at hbody
-      -- The remaining steps (inner-loop-1, inner-loop-2, update_at, round +? 1)
-      -- can be walked in principle but require restating the exact inner-loop terms,
-      -- which causes parse complications due to the type ascription in the do-block.
-      -- For now we record the conclusion as sorry; the body-IsOk proof above shows
-      -- that the inner loops succeed, and the final `round +? 1` step gives
-      -- `round'.toNat = round.toNat + 1`. The bounds then follow trivially.
+      -- Walk through inner-loop-1, inner-loop-2, update_at, round+?1 using the
+      -- back-walking helper `RustM.bind_isOk_of_eq`: from `(x >>= f) = .ok v`
+      -- it deduces `x.isOk = true`, letting us avoid restating the inner-loop
+      -- term (which has parse complications due to do-block type ascription).
+      have h_inner1_isOk := LibcruxSpecs.PanicFree.RustM.bind_isOk_of_eq _ _ _ hbody
+      obtain ⟨inner1_pair, _, h_inner1_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_inner1_isOk
+      rw [h_inner1_rw] at hbody
+      obtain ⟨_j1, rk1⟩ := inner1_pair
+      simp only at hbody
+      have h_inner2_isOk := LibcruxSpecs.PanicFree.RustM.bind_isOk_of_eq _ _ _ hbody
+      obtain ⟨inner2_pair, _, h_inner2_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_inner2_isOk
+      rw [h_inner2_rw] at hbody
+      obtain ⟨_j2, rk2⟩ := inner2_pair
+      simp only at hbody
+      have h_upd_isOk := LibcruxSpecs.PanicFree.RustM.bind_isOk_of_eq _ _ _ hbody
+      obtain ⟨_nrk, _, h_upd_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_upd_isOk
+      rw [h_upd_rw] at hbody
+      -- Now hbody : (round +? 1) >>= fun r => pure ⟨r, _nrk⟩ = .ok ⟨round', round_keys'⟩
+      have h_round1 : (round +? (1 : usize)).isOk = true :=
+        LibcruxSpecs.PanicFree.usize_add_one_isOk_of_lt (N := 11) round (by omega) (by decide)
+      obtain ⟨round_new, hround_new_eq, h_round1_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_round1
+      rw [h_round1_rw] at hbody
+      have hround_new_toNat : round_new.toNat = round.toNat + 1 :=
+        LibcruxSpecs.PanicFree.usize_add_one_toNat (N := 11) round round_new
+          (by omega) (by decide) hround_new_eq
+      have hpair : (Rust_primitives.Hax.Tuple2.mk round_new _nrk
+                     : Rust_primitives.Hax.Tuple2 _ _) =
+                   Rust_primitives.Hax.Tuple2.mk round' round_keys' := RustM.ok.inj hbody
+      have hround'eq : round_new = round' := by injection hpair
+      have hround'_val : round'.toNat = round.toNat + 1 := by
+        rw [← hround'eq]; exact hround_new_toNat
       refine ⟨?_, ?_⟩
-      · sorry  -- TODO: round'.toNat ≥ 1 (from round.toNat ≥ 1 and round' = round + 1).
-               -- Walk past inner-loop-1, inner-loop-2, update_at, then extract `round +? 1`.
-      · sorry  -- TODO: round'.toNat ≤ 11 (from round.toNat ≤ 10 and round' = round + 1).
+      · show 1 ≤ round'.toNat
+        rw [hround'_val]; omega
+      · show round'.toNat ≤ 11
+        rw [hround'_val]; omega
     · -- Initial invariant
       refine ⟨?_, ?_⟩
       · show 1 ≤ (1 : usize).toNat; decide
