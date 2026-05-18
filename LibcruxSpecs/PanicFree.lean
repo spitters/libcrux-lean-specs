@@ -1265,9 +1265,68 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
       --   * Conclude: round'.toNat = round.toNat + 1, so:
       --     - round'.toNat ≥ 1 follows from round.toNat ≥ 1 (actually trivially from round ≥ 1 + 1 ≥ 1)
       --     - round'.toNat ≤ 11 follows from round.toNat ≤ 10
+      have hround_lo' : 1 ≤ round.toNat := by simp only at hround_lo; exact hround_lo
+      have hsub : (round -? (1 : usize)).isOk = true := by
+        apply LibcruxSpecs.PanicFree.usize_sub_isOk
+        show (1 : usize).toNat ≤ round.toNat
+        have h1 : (1 : usize).toNat = 1 := rfl; omega
+      obtain ⟨round_m1, hround_m1_eq, h_rm1_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) hsub
+      rw [h_rm1_rw] at hbody
+      have hround_m1_val : round_m1.toNat = round.toNat - 1 := by
+        have hnov : ¬ BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec := by
+          simp [BitVec.usubOverflow]; omega
+        have : (round -? (1 : usize)) = .ok (round - (1 : usize)) := by
+          show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
+                then RustM.fail Error.integerOverflow
+                else pure (round - (1 : usize))) = _
+          rw [if_neg hnov]; rfl
+        rw [this] at hround_m1_eq
+        have heq : round_m1 = round - (1 : usize) := (RustM.ok.inj hround_m1_eq).symm
+        rw [heq, USize64.toNat_sub_of_le']
+        · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]
+        · have h1 : (1 : usize).toNat = 1 := rfl; rw [h1]; exact hround_lo'
+      have hround_m1_lt11 : round_m1.toNat < 11 := by rw [hround_m1_val]; omega
+      have h_prev : (round_keys[round_m1]_? : RustM (RustArray u8 16)).isOk = true :=
+        LibcruxSpecs.PanicFree.vector_getElem_usize_isOk round_keys round_m1 hround_m1_lt11
+      obtain ⟨prev, _, h_prev_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_prev
+      rw [h_prev_rw] at hbody
+      have h_rkinit : (Rust_primitives.Hax.repeat (n := 16) (0 : UInt8) (16 : usize)).isOk = true :=
+        LibcruxSpecs.PanicFree.repeat_isOk (n := 16) (0 : UInt8) (16 : usize) rfl
+      obtain ⟨rk_init, _, h_rkinit_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_rkinit
+      rw [h_rkinit_rw] at hbody
+      have h_v13 : (prev[(13 : usize)]_? : RustM UInt8).isOk = true :=
+        LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev (13 : usize) (by decide)
+      obtain ⟨v13, _, h_v13_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_v13
+      rw [h_v13_rw] at hbody
+      have h_v14 : (prev[(14 : usize)]_? : RustM UInt8).isOk = true :=
+        LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev (14 : usize) (by decide)
+      obtain ⟨v14, _, h_v14_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_v14
+      rw [h_v14_rw] at hbody
+      have h_v15 : (prev[(15 : usize)]_? : RustM UInt8).isOk = true :=
+        LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev (15 : usize) (by decide)
+      obtain ⟨v15, _, h_v15_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_v15
+      rw [h_v15_rw] at hbody
+      have h_v12 : (prev[(12 : usize)]_? : RustM UInt8).isOk = true :=
+        LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev (12 : usize) (by decide)
+      obtain ⟨v12, _, h_v12_rw⟩ :=
+        LibcruxSpecs.PanicFree.bind_eq_of_isOk _ (fun _ => _) h_v12
+      rw [h_v12_rw] at hbody
+      -- The remaining steps (inner-loop-1, inner-loop-2, update_at, round +? 1)
+      -- can be walked in principle but require restating the exact inner-loop terms,
+      -- which causes parse complications due to the type ascription in the do-block.
+      -- For now we record the conclusion as sorry; the body-IsOk proof above shows
+      -- that the inner loops succeed, and the final `round +? 1` step gives
+      -- `round'.toNat = round.toNat + 1`. The bounds then follow trivially.
       refine ⟨?_, ?_⟩
-      · sorry  -- TODO: round'.toNat ≥ 1 (from round.toNat ≥ 1 and round' = round + 1)
-      · sorry  -- TODO: round'.toNat ≤ 11 (from round.toNat ≤ 10 and round' = round + 1)
+      · sorry  -- TODO: round'.toNat ≥ 1 (from round.toNat ≥ 1 and round' = round + 1).
+               -- Walk past inner-loop-1, inner-loop-2, update_at, then extract `round +? 1`.
+      · sorry  -- TODO: round'.toNat ≤ 11 (from round.toNat ≤ 10 and round' = round + 1).
     · -- Initial invariant
       refine ⟨?_, ?_⟩
       · show 1 ≤ (1 : usize).toNat; decide
