@@ -25,11 +25,13 @@ jobs:
           key: lake-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}
           restore-keys: lake-
 
-      - name: Build
+      - name: Build, which is also the sorry audit
+        # The package is built under `-E hasSorry` (see lakefile.lean), so Lean
+        # reports a declaration whose proof term reaches `sorryAx` as an error
+        # and the build fails on it. The previous separate step passed
+        # `-- --run-linter=sorryIn`, which runs no linter: Lean has no
+        # `--run-linter` flag and Lake forwards no arguments after `--`.
         run: lake build
-
-      - name: Sorry audit
-        run: lake build LibcruxSpecs -- --run-linter=sorryIn
 
   rust:
     name: Rust specs tests
