@@ -123,8 +123,6 @@ theorem Rust_primitives.Hax.Folds.usize.fold_range_spec {α}
     exact (⇓ (⟨ suff, _, _ ⟩ , acc ) => ⌜ inv acc (s + (USize64.ofNat suff.length)) = pure true ⌝ )
   case vc2.pre =>
     simp [Coe.coe, USize64.ofNat] at *
-    show inv init (s + (0 : USize64)) = pure true
-    rw [USize64.add_zero]
     exact h_le
   case vc4.post.except =>
     simp [Coe.coe, USize64.ofNat] at * <;> try assumption

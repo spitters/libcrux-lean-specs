@@ -1,15 +1,20 @@
-{"version": "1.1.0",
- "packagesDir": ".lake/packages",
- "packages":
- [{"url": "https://github.com/leanprover-community/quote4",
-   "type": "git",
-   "subDir": null,
-   "scope": "",
-   "rev": "707efb56d0696634e9e965523a1bbe9ac6ce141d",
-   "name": "Qq",
-   "manifestFile": "lake-manifest.json",
-   "inputRev": "707efb56d0696634e9e965523a1bbe9ac6ce141d",
-   "inherited": false,
-   "configFile": "lakefile.toml"}],
- "name": "«libcrux-lean-specs»",
- "lakeDir": ".lake"}
+{
+  "version": "1.1.0",
+  "packagesDir": ".lake/packages",
+  "packages": [
+    {
+      "url": "https://github.com/leanprover-community/quote4",
+      "type": "git",
+      "subDir": null,
+      "scope": "",
+      "rev": "92c15be17b7caf78c2ad767ec40f89052d908d81",
+      "name": "Qq",
+      "manifestFile": "lake-manifest.json",
+      "inputRev": "92c15be17b7caf78c2ad767ec40f89052d908d81",
+      "inherited": false,
+      "configFile": "lakefile.toml"
+    }
+  ],
+  "name": "«libcrux-lean-specs»",
+  "lakeDir": ".lake"
+}

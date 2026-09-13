@@ -280,10 +280,10 @@ instance : ToInt.Div USize64 (.uint 64) where
   toInt_div x y := by simp
 
 instance : ToInt.LE USize64 (.uint 64) where
-  le_iff x y := by simpa using USize64.le_iff_toBitVec_le
+  le_iff x y := by simpa [BitVec.le_def] using USize64.le_iff_toBitVec_le
 
 instance : ToInt.LT USize64 (.uint 64) where
-  lt_iff x y := by simpa using USize64.lt_iff_toBitVec_lt
+  lt_iff x y := by simpa [BitVec.lt_def] using USize64.lt_iff_toBitVec_lt
 
 
 @[expose, reducible]

@@ -108,7 +108,7 @@ theorem RustM.bind_isOk' {α β : Type} (x : RustM α) (f : α → RustM β)
 
 Leaf-function helpers below mirror the AES helper pattern (`aes128_key_expand_isOk`,
 `aes_encrypt_rounds_isOk`): they are kept as named TODOs so the wrapper-level
-proofs are genuine compositions. -/
+proofs are compositions of the leaf lemmas. -/
 
 /-! ### SHA-256 inner helpers (panic-free without precondition) -/
 
@@ -740,8 +740,8 @@ theorem hkdf_expand_32_isOk (prk info : Vector UInt8 32) :
     RustM.IsOk (Libcrux_specs.Fixed.hkdf_expand_32 prk info) := by
   sorry  -- TODO: needs strengthened `hkdf_expand_isOk_with_size` returning
          --       `okm.toArray.size = 32`, plus `fold_range_usize_isOk` for the
-         --       OKM-copy loop body (the `fold_range_usize_isOk` keystone is
-         --       now in `PanicFreeInfra.lean`).
+         --       OKM-copy loop body (`fold_range_usize_isOk` is in
+         --       `PanicFreeInfra.lean`).
 
 /-- Helper: AES-128 key expansion always succeeds.
 
@@ -2321,7 +2321,6 @@ private theorem cmp256_isOk (a b : Vector UInt64 4) :
     intro _ _; rfl
   case hbody =>
     intro i hinv hcond
-    simp only at hcond ⊢
     have hi_lt : i.toNat < 4 := by
       have := usize_lt_of_machine_lt hcond
       change i.toNat < (4 : usize).toNat at this
@@ -2352,7 +2351,6 @@ private theorem cmp256_isOk (a b : Vector UInt64 4) :
         intro _; rfl
   case hpres =>
     intro i r hinv hcond hbody
-    simp only at hcond hbody
     have hi_lt : i.toNat < 4 := by
       have := usize_lt_of_machine_lt hcond
       change i.toNat < (4 : usize).toNat at this
@@ -2603,18 +2601,12 @@ theorem fp_sqrt_p256_isOk (a : Vector UInt64 4) :
   unfold Libcrux_specs.Fixed.fp_sqrt_p256
   -- After the trivial `result := a`, this is `fold_range (0 : i32) 255 _ result body`
   -- where body = (fun result _ => do let r ← fp_sq result; fp_mul r a).
+  refine LibcruxSpecs.PanicFree.fold_range_isOk_const _ _ _ _ _ ?_
+  intro acc _i
   apply LibcruxSpecs.PanicFree.bind_isOk_simple
-  · refine LibcruxSpecs.PanicFree.fold_range_isOk_const _ _ _ _ _ ?_
-    intro acc _i
-    apply LibcruxSpecs.PanicFree.bind_isOk_simple
-    · exact p256_fp_sq_isOk acc
-    intro r
-    apply LibcruxSpecs.PanicFree.bind_isOk_simple
-    · exact p256_fp_mul_isOk r a
-    intro _
-    rfl
-  intro _
-  rfl
+  · exact p256_fp_sq_isOk acc
+  intro r
+  exact p256_fp_mul_isOk r a
 
 /-- P-256 base point multiplication does not panic.
     Compositional: `base_mult k → p256_to_affine → fp_to_bytes ∘ .x`. -/
