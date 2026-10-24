@@ -246,44 +246,53 @@ theorem USize64.ofNat_eq_of_toNat_eq {a : Nat} {b : USize64} (h : b.toNat = a) :
   subst_vars; exact USize64.ofNat_toNat
 
 /-!
-## Grind's ToInt
+## Grind homomorphism rules
 
-For grind to use integer arithmetic on `USize64`, we need the following instances, inspired by
-the modules `Init.GrindInstances.ToInt` and `Init.GrindInstances.Ring.UInt`.
+Homomorphism rules for `USize64` used by the `grind` tactic, following `Init.Grind.Homo.UInt64`.
+The injection function is `USize64.toBitVec`; the ring structure below follows
+`Init.GrindInstances.Ring.UInt`.
 -/
 
 namespace Lean.Grind
 
-instance : ToInt USize64 (.uint 64) where
-  toInt x := (x.toNat : Int)
-  toInt_inj x y w := USize64.toNat_inj.mp (Int.ofNat_inj.mp w)
-  toInt_mem x := by simpa using Int.lt_toNat.mp (USize64.toNat_lt x)
+@[grind hom] theorem USize64.toBitVec_add (a b : _root_.USize64) :
+    (a + b).toBitVec = a.toBitVec + b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_sub (a b : _root_.USize64) :
+    (a - b).toBitVec = a.toBitVec - b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_mul (a b : _root_.USize64) :
+    (a * b).toBitVec = a.toBitVec * b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_div (a b : _root_.USize64) :
+    (a / b).toBitVec = a.toBitVec / b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_mod (a b : _root_.USize64) :
+    (a % b).toBitVec = a.toBitVec % b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_and (a b : _root_.USize64) :
+    (a &&& b).toBitVec = a.toBitVec &&& b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_or (a b : _root_.USize64) :
+    (a ||| b).toBitVec = a.toBitVec ||| b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_xor (a b : _root_.USize64) :
+    (a ^^^ b).toBitVec = a.toBitVec ^^^ b.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_shiftLeft (a b : _root_.USize64) :
+    (a <<< b).toBitVec = a.toBitVec <<< (b.toBitVec % 64) := rfl
+@[grind hom] theorem USize64.toBitVec_shiftRight (a b : _root_.USize64) :
+    (a >>> b).toBitVec = a.toBitVec >>> (b.toBitVec % 64) := rfl
+@[grind hom] theorem USize64.toBitVec_not (a : _root_.USize64) :
+    (~~~a).toBitVec = ~~~a.toBitVec := rfl
+@[grind hom] theorem USize64.toBitVec_neg (a : _root_.USize64) :
+    (-a).toBitVec = -a.toBitVec := rfl
 
-@[simp] theorem toInt_usize64 (x : USize64) : ToInt.toInt x = (x.toNat : Int) := rfl
+/-- The literal rule for `USize64`, with the right-hand side in the `OfNat.ofNat` form that
+`grind` keeps for `BitVec` literals. -/
+@[grind hom] theorem USize64.toBitVec_OfNat_ofNat (a : Nat) :
+    (OfNat.ofNat a : _root_.USize64).toBitVec = OfNat.ofNat a := rfl
 
-instance : ToInt.Zero USize64 (.uint 64) where
-  toInt_zero := by simp
+@[grind hom] theorem USize64.toBitVec_ofNat (a : Nat) :
+    (_root_.USize64.ofNat a).toBitVec = OfNat.ofNat a := rfl
 
-instance : ToInt.OfNat USize64 (.uint 64) where
-  toInt_ofNat x := by simp; rfl
+@[grind hom] theorem USize64.toNat_eq_toBitVec_toNat (x : _root_.USize64) :
+    x.toNat = x.toBitVec.toNat := rfl
 
-instance : ToInt.Add USize64 (.uint 64) where
-  toInt_add x y := by simp
-
-instance : ToInt.Mul USize64 (.uint 64) where
-  toInt_mul x y := by simp
-
-instance : ToInt.Mod USize64 (.uint 64) where
-  toInt_mod x y := by simp
-
-instance : ToInt.Div USize64 (.uint 64) where
-  toInt_div x y := by simp
-
-instance : ToInt.LE USize64 (.uint 64) where
-  le_iff x y := by simpa [BitVec.le_def] using USize64.le_iff_toBitVec_le
-
-instance : ToInt.LT USize64 (.uint 64) where
-  lt_iff x y := by simpa [BitVec.lt_def] using USize64.lt_iff_toBitVec_lt
+attribute [grind hom] _root_.USize64.eq_iff_toBitVec_eq
+  _root_.USize64.le_iff_toBitVec_le _root_.USize64.lt_iff_toBitVec_lt
 
 
 @[expose, reducible]
@@ -341,9 +350,6 @@ instance : IsCharP USize64 18446744073709551616 := IsCharP.mk' _ _
     have : OfNat.ofNat x = USize64.ofNat x := rfl
     simp [this, USize64.ofNat_eq_iff_mod_eq_toNat]
     )
-
-instance : ToInt.Pow USize64 (.uint 64) := ToInt.pow_of_semiring (by simp)
-
 
 end Lean.Grind
 

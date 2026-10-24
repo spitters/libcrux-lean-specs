@@ -426,7 +426,7 @@ theorem usize_add_one_toNat {N : Nat} (i i' : usize) (h : i.toNat < N) (hN : N +
   have heq' : (if BitVec.uaddOverflow i.toBitVec (1 : usize).toBitVec
                then RustM.fail Error.integerOverflow
                else pure (i + (1 : usize))) = .ok i' := heq
-  rw [if_neg hnov] at heq'
+  rw [ite_eq_right hnov] at heq'
   have : i' = i + (1 : usize) := by
     have := RustM.ok.inj heq'
     exact this.symm
@@ -457,7 +457,7 @@ theorem usize_sub_one_toNat (i i' : usize) (h : 1 ≤ i.toNat)
   have heq' : (if BitVec.usubOverflow i.toBitVec (1 : usize).toBitVec
                then RustM.fail Error.integerOverflow
                else pure (i - (1 : usize))) = .ok i' := heq
-  rw [if_neg hnov] at heq'
+  rw [ite_eq_right hnov] at heq'
   have : i' = i - (1 : usize) := by
     have := RustM.ok.inj heq'
     exact this.symm
@@ -1496,7 +1496,7 @@ theorem shift_rows_isOk (state : RustArray u8 16) :
             have hne : (4 : usize) ≠ 0 := by decide
             have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
               show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero else pure (cr % (4 : usize))) = _
-              rw [if_neg hne]; rfl
+              rw [ite_eq_right hne]; rfl
             rw [heq] at hm
             have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
             rw [this]
@@ -1633,7 +1633,7 @@ theorem shift_rows_isOk (state : RustArray u8 16) :
             have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
               show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
                     else pure (cr % (4 : usize))) = _
-              rw [if_neg hne]; rfl
+              rw [ite_eq_right hne]; rfl
             rw [heq] at hm
             have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
             rw [this]
@@ -1825,7 +1825,7 @@ theorem shift_rows_isOk (state : RustArray u8 16) :
             have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
               show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
                     else pure (cr % (4 : usize))) = _
-              rw [if_neg hne]; rfl
+              rw [ite_eq_right hne]; rfl
             rw [heq] at hm
             have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
             rw [this]
@@ -1953,7 +1953,7 @@ theorem shift_rows_isOk (state : RustArray u8 16) :
             have heq : (cr %? (4 : usize)) = .ok (cr % (4 : usize)) := by
               show (if (4 : usize) = 0 then RustM.fail Error.divisionByZero
                     else pure (cr % (4 : usize))) = _
-              rw [if_neg hne]; rfl
+              rw [ite_eq_right hne]; rfl
             rw [heq] at hm
             have : m = cr % (4 : usize) := (RustM.ok.inj hm).symm
             rw [this]

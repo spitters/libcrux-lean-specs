@@ -387,7 +387,7 @@ pattern (see `aes_encrypt_rounds_isOk` invariant-preservation step in
         show (if BitVec.usubOverflow i.toBitVec (2 : usize).toBitVec
               then RustM.fail Error.integerOverflow
               else pure (i - (2 : usize))) = _
-        rw [if_neg hnov]; rfl
+        rw [ite_eq_right hnov]; rfl
       rw [this] at him2
       have heq : im2 = i - (2 : usize) := (RustM.ok.inj him2).symm
       rw [heq, USize64.toNat_sub_of_le']
@@ -413,7 +413,7 @@ pattern (see `aes_encrypt_rounds_isOk` invariant-preservation step in
         show (if BitVec.usubOverflow i.toBitVec (7 : usize).toBitVec
               then RustM.fail Error.integerOverflow
               else pure (i - (7 : usize))) = _
-        rw [if_neg hnov]; rfl
+        rw [ite_eq_right hnov]; rfl
       rw [this] at him7
       have heq : im7 = i - (7 : usize) := (RustM.ok.inj him7).symm
       rw [heq, USize64.toNat_sub_of_le']
@@ -440,7 +440,7 @@ pattern (see `aes_encrypt_rounds_isOk` invariant-preservation step in
         show (if BitVec.usubOverflow i.toBitVec (15 : usize).toBitVec
               then RustM.fail Error.integerOverflow
               else pure (i - (15 : usize))) = _
-        rw [if_neg hnov]; rfl
+        rw [ite_eq_right hnov]; rfl
       rw [this] at him15
       have heq : im15 = i - (15 : usize) := (RustM.ok.inj him15).symm
       rw [heq, USize64.toNat_sub_of_le']
@@ -468,7 +468,7 @@ pattern (see `aes_encrypt_rounds_isOk` invariant-preservation step in
         show (if BitVec.usubOverflow i.toBitVec (16 : usize).toBitVec
               then RustM.fail Error.integerOverflow
               else pure (i - (16 : usize))) = _
-        rw [if_neg hnov]; rfl
+        rw [ite_eq_right hnov]; rfl
       rw [this] at him16
       have heq : im16 = i - (16 : usize) := (RustM.ok.inj him16).symm
       rw [heq, USize64.toNat_sub_of_le']
@@ -820,7 +820,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
           show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
                 then RustM.fail Error.integerOverflow
                 else pure (round - (1 : usize))) = _
-          rw [if_neg hnov]; rfl
+          rw [ite_eq_right hnov]; rfl
         rw [this] at hround_m1_eq
         have heq : round_m1 = round - (1 : usize) := (RustM.ok.inj hround_m1_eq).symm
         rw [heq, USize64.toNat_sub_of_le']
@@ -918,7 +918,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
                 show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
                       then RustM.fail Error.integerOverflow
                       else pure (round - (1 : usize))) = _
-                rw [if_neg hnov]; rfl
+                rw [ite_eq_right hnov]; rfl
               rw [this] at hrm1_eq
               have heq : rm1 = round - (1 : usize) := (RustM.ok.inj hrm1_eq).symm
               rw [heq, USize64.toNat_sub_of_le']
@@ -999,7 +999,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
           have hj' : j'.toNat = j.toNat + 1 := by
             cases beq with
             | true =>
-              simp only [if_true] at hbody_j
+              simp only [ite_true] at hbody_j
               have h_pj : (prev[j]_? : RustM UInt8).isOk = true :=
                 LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega)
               obtain ⟨pj, _, h_pj_rw⟩ :=
@@ -1020,7 +1020,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
                   show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
                         then RustM.fail Error.integerOverflow
                         else pure (round - (1 : usize))) = _
-                  rw [if_neg hnov]; rfl
+                  rw [ite_eq_right hnov]; rfl
                 rw [this] at hrm1_eq
                 have heq : rm1 = round - (1 : usize) := (RustM.ok.inj hrm1_eq).symm
                 rw [heq, USize64.toNat_sub_of_le']
@@ -1059,7 +1059,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
               exact LibcruxSpecs.PanicFree.usize_add_one_toNat (N := 4) j j_new hj_lt
                 (by decide) hj_new_eq
             | false =>
-              simp only [Bool.false_eq_true, if_false] at hbody_j
+              simp only [Bool.false_eq_true, ite_false] at hbody_j
               have h_pj : (prev[j]_? : RustM UInt8).isOk = true :=
                 LibcruxSpecs.PanicFree.vector_getElem_usize_isOk prev j (by omega)
               obtain ⟨pj, _, h_pj_rw⟩ :=
@@ -1137,7 +1137,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
               show (if BitVec.usubOverflow j.toBitVec (4 : usize).toBitVec
                     then RustM.fail Error.integerOverflow
                     else pure (j - (4 : usize))) = _
-              rw [if_neg hnov]; rfl
+              rw [ite_eq_right hnov]; rfl
             rw [this] at hjm4_eq
             have heq : jm4 = j - (4 : usize) := (RustM.ok.inj hjm4_eq).symm
             rw [heq, USize64.toNat_sub_of_le']
@@ -1189,7 +1189,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
               show (if BitVec.usubOverflow j.toBitVec (4 : usize).toBitVec
                     then RustM.fail Error.integerOverflow
                     else pure (j - (4 : usize))) = _
-              rw [if_neg hnov]; rfl
+              rw [ite_eq_right hnov]; rfl
             rw [this] at hjm4_eq
             have heq : jm4 = j - (4 : usize) := (RustM.ok.inj hjm4_eq).symm
             rw [heq, USize64.toNat_sub_of_le']
@@ -1290,7 +1290,7 @@ theorem aes128_key_expand_isOk (key : Vector UInt8 16) :
           show (if BitVec.usubOverflow round.toBitVec (1 : usize).toBitVec
                 then RustM.fail Error.integerOverflow
                 else pure (round - (1 : usize))) = _
-          rw [if_neg hnov]; rfl
+          rw [ite_eq_right hnov]; rfl
         rw [this] at hround_m1_eq
         have heq : round_m1 = round - (1 : usize) := (RustM.ok.inj hround_m1_eq).symm
         rw [heq, USize64.toNat_sub_of_le']
@@ -2372,7 +2372,7 @@ private theorem cmp256_isOk (a b : Vector UInt64 4) :
     cases blt with
     | true =>
       -- hbody says pure (Break (Break -1)) = .ok (Continue r), contradiction
-      simp only [if_true, pure] at hbody
+      simp only [ite_true, pure] at hbody
       cases hbody
     | false =>
       have ha_isOk2 : (a[i]_? : RustM UInt64).isOk = true :=
@@ -2388,7 +2388,7 @@ private theorem cmp256_isOk (a b : Vector UInt64 4) :
       rw [hgt_rw] at hbody
       cases bgt with
       | true =>
-        simp only [if_true, pure] at hbody
+        simp only [ite_true, pure] at hbody
         cases hbody
       | false =>
         have hadd_isOk : (i +? (1 : usize)).isOk = true :=

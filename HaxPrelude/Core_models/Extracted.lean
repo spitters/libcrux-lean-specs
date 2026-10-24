@@ -454,8 +454,8 @@ def black_box (T : Type) (dummy : T) : RustM T := do (pure dummy)
 @[spec]
 def black_box.spec (T : Type) (dummy : T) :
     Spec
-      (requires := do pure True)
-      (ensures := fun res => do (Hax_lib.Prop.Impl.from_bool true))
+      («requires» :=do pure True)
+      («ensures» :=fun res => do (Hax_lib.Prop.Impl.from_bool true))
       (black_box (T : Type) (dummy : T)) := {
   pureRequires := by constructor; mvcgen <;> try grind
   pureEnsures := by constructor; intros; mvcgen <;> try grind
@@ -467,8 +467,8 @@ def must_use (T : Type) (value : T) : RustM T := do (pure value)
 @[spec]
 def must_use.spec (T : Type) (value : T) :
     Spec
-      (requires := do pure True)
-      (ensures := fun res => do (Hax_lib.Prop.Impl.from_bool true))
+      («requires» :=do pure True)
+      («ensures» :=fun res => do (Hax_lib.Prop.Impl.from_bool true))
       (must_use (T : Type) (value : T)) := {
   pureRequires := by constructor; mvcgen <;> try grind
   pureEnsures := by constructor; intros; mvcgen <;> try grind
@@ -1503,8 +1503,8 @@ def Impl.is_some (T : Type) (self : (Option T)) : RustM Bool := do
 @[spec]
 def Impl.is_some.spec (T : Type) (self : (Option T)) :
     Spec
-      (requires := do pure True)
-      (ensures := fun
+      («requires» :=do pure True)
+      («ensures» :=fun
           res => do
           (Hax_lib.Prop.Constructors.implies
             (← (Hax_lib.Prop.Constructors.from_bool res))

@@ -137,27 +137,27 @@ macro "declare_comparison_specs" s:(&"signed" <|> &"unsigned") typeName:ident wi
 
       @[spec]
       def eq_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ eq x y ⦃ ⇓ r => ⌜ r = (x.toInt == y.toInt) ⌝ ⦄ := by
-        mvcgen [eq]; rw [← @Bool.coe_iff_coe]; simp [x.toInt_inj]
+        mvcgen [eq] <;> (rw [← @Bool.coe_iff_coe]; simp [x.toInt_inj])
 
       @[spec]
       def ne_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ ne x y ⦃ ⇓ r => ⌜ r = (x.toInt != y.toInt) ⌝ ⦄ := by
-        mvcgen [ne]; rw [← @Bool.coe_iff_coe]; simp [x.toInt_inj]
+        mvcgen [ne] <;> (rw [← @Bool.coe_iff_coe]; simp [x.toInt_inj])
 
       @[spec]
       def lt_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ lt x y ⦃ ⇓ r => ⌜ r = decide (x.toInt < y.toInt) ⌝ ⦄ := by
-        mvcgen [lt]; simp [x.lt_iff_toInt_lt]
+        mvcgen [lt] <;> simp [x.lt_iff_toInt_lt]
 
       @[spec]
       def le_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ le x y ⦃ ⇓ r => ⌜ r = decide (x.toInt ≤ y.toInt) ⌝ ⦄ := by
-        mvcgen [le]; simp [x.le_iff_toInt_le]
+        mvcgen [le] <;> simp [x.le_iff_toInt_le]
 
       @[spec]
       def gt_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ gt x y ⦃ ⇓ r => ⌜ r = decide (x.toInt > y.toInt ) ⌝ ⦄ := by
-        mvcgen [gt]; simp [y.lt_iff_toInt_lt]
+        mvcgen [gt] <;> simp [y.lt_iff_toInt_lt]
 
       @[spec]
       def ge_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ ge x y ⦃ ⇓ r => ⌜ r = decide (x.toInt ≥ y.toInt) ⌝ ⦄ := by
-        mvcgen [ge]; simp [y.le_iff_toInt_le]
+        mvcgen [ge] <;> simp [y.le_iff_toInt_le]
 
       end $typeName
     )
@@ -166,11 +166,11 @@ macro "declare_comparison_specs" s:(&"signed" <|> &"unsigned") typeName:ident wi
 
       @[spec]
       def eq_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ eq x y ⦃ ⇓ r => ⌜ r = (x.toNat == y.toNat) ⌝ ⦄ := by
-        mvcgen [eq]; rw [← @Bool.coe_iff_coe]; simp [x.toNat_inj]
+        mvcgen [eq] <;> (rw [← @Bool.coe_iff_coe]; simp [x.toNat_inj])
 
       @[spec]
       def ne_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ ne x y ⦃ ⇓ r => ⌜ r = (x.toNat != y.toNat) ⌝ ⦄ := by
-        mvcgen [ne]; rw [← @Bool.coe_iff_coe]; simp [x.toNat_inj]
+        mvcgen [ne] <;> (rw [← @Bool.coe_iff_coe]; simp [x.toNat_inj])
 
       @[spec]
       def lt_spec (x y : $typeName) : ⦃ ⌜ True ⌝ ⦄ lt x y ⦃ ⇓ r => ⌜ r = decide (x.toNat < y.toNat) ⌝ ⦄ := by
